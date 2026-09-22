@@ -1,6 +1,6 @@
 {
   "$comment": "CANONICAL COMPONENT REGISTRY. Read this FIRST before building any UI in this repo. If a component exists here with status 'built', reuse it via its tag — never re-author the markup inline. If you need something not listed, build it as a tv-* web component, add an entry here, and add a preview section to index.html. See component-library/COMPONENTS.md.",
-  "updated": "2026-08-13",
+  "updated": "2026-09-21",
   "components": [
     {
       "id": "status-tag",
@@ -9,7 +9,7 @@
       "category": "Primitives",
       "status": "built",
       "definedIn": "components/tv-status-tag.js",
-      "summary": "ONE core chip with a fixed structure (padding, radius, optional left icon or dot, label). Two axes: tone (primary/success/warn/info/error/neutral) × variant (fill | dot). The semantic kinds (roles, member states, publication, audit events) are thin mappings onto {tone, variant, icon, label} — not separate colour definitions, so families share one tone (AI graded = Org admin = primary; adjusted = moderator = draft = warn; etc.).",
+      "summary": "ONE core chip with a fixed structure (padding, radius, optional left icon or dot, label). Two axes: tone (primary/success/warn/info/error/neutral) × variant (fill | dot). The semantic kinds (roles, member states, publication, audit events, checks & grading outcomes) are thin mappings onto {tone, variant, icon, label} — not separate colour definitions, so families share one tone (AI graded = Org admin = primary; adjusted = moderator = draft = warn; passed = auto-marked = success; etc.). The checks & grading set is the single severity vocabulary shared by the checks panel and the sample grading tab: pass→success, issue→error, attention→warn, mixed/contested→info, n/a→neutral, and primary is never a severity. Every kind carries its own icon as well as its own tone, so severity never rests on colour alone.",
       "useCases": [
         "Marker on a list row or canvas object (grading, members, audit entries)",
         "Header marker inside a modal card",
@@ -19,9 +19,15 @@
       "attributes": [
         {
           "name": "kind",
-          "type": "moderation: ai | adjusted | flag | auto · member states: active | pending | deactivated | cancelled | expired | removed · indicators: live · roles: admin | owner | moderator | candidate | neutral · publication: draft | published | archived | coming · audit events: created | promoted | revoked",
+          "type": "moderation: ai | adjusted | flag | auto · member states: active | pending | deactivated | cancelled | expired | removed · indicators: live · roles: admin | owner | moderator | candidate | neutral · publication: draft | published | archived | coming · audit events: created | promoted | revoked · checks & grading: passed | in-range | graded | issue | graded-low | graded-high | off-target | failed | needs-target | improvement | out-of-date | unstable | ready | not-checked | skipped | not-graded | no-target",
           "default": "—",
           "desc": "Semantic shorthand — sets tone/variant/icon/label defaults from the mapping table."
+        },
+        {
+          "name": "busy",
+          "type": "boolean",
+          "default": "false",
+          "desc": "Swap the glyph for a spinner while the state is in flight (converting, grading, re-running), so an async status is the same chip as its settled state rather than a second pill built beside it."
         },
         {
           "name": "tone",
@@ -442,6 +448,18 @@
           "type": "boolean",
           "default": "false",
           "desc": "Prompt before closing when .dirty is true."
+        },
+        {
+          "name": "cancel-closes",
+          "type": "'false'",
+          "default": "closes",
+          "desc": "Keeps the card open when the secondary button is pressed — for a secondary that is an action rather than a dismissal (Ignore, View all). ✕ / Esc / scrim still close. Setting cancel-label alone also gives you a footer with no primary beside it."
+        },
+        {
+          "name": "slot=\"footer-start\"",
+          "type": "slotted content",
+          "default": "—",
+          "desc": "Controls pinned to the footer's left edge, before the hint — for stepping through a set the card works across (‹ 3 of 12 ›). Navigation within the card only; anything that commits stays a footer button on the right. Omit it and the footer is unchanged."
         }
       ],
       "events": [
@@ -471,7 +489,8 @@
       "dos": [
         "Recognise on the screen, act in the card.",
         "Build the body from tv-field / tv-excerpt / tv-diff.",
-        "Gate the primary with confirm-disabled until valid."
+        "Gate the primary with confirm-disabled until valid.",
+        "Use slot=\"footer-start\" for in-card navigation (a queue stepper), never for a commit action."
       ],
       "donts": [
         "Don't stack modals or open a card from a card.",

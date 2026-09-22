@@ -31,6 +31,9 @@
      icon     override the icon name (fill variant)
      no-icon  suppress the icon a kind would show
      label    override the default text
+     busy     boolean — swap the glyph for a spinner while the state is in
+              flight (converting, grading, re-running), so an async status is
+              the same chip as its settled state
 
    Tokens (with fallbacks): --primary-50/200/700, --warn-100/600,
      --error-100/500, --success-100/600, --info-100/500, --surface-100, --fg-3
@@ -80,11 +83,38 @@
     created: { tone: 'success', variant: 'fill', label: 'Created' },
     promoted: { tone: 'info', variant: 'fill', label: 'Promoted' },
     revoked: { tone: 'error', variant: 'fill', label: 'Deactivated' },
+    // ---- checks & grading outcomes (fill) ----------------------------
+    // ONE severity vocabulary, shared by the checks panel and the sample
+    // grading tab so a colour means the same thing on either. Note every
+    // kind has its OWN icon as well as its own tone: the checks POC gave
+    // "improvement" and "could not run" the same glyph and let colour
+    // carry the difference, which colour alone can't do.
+    //   pass → success · issue → error · attention → warn
+    //   mixed/contested → info · n/a → neutral
+    // Indigo is deliberately absent: primary is for actions, never for a
+    // severity.
+    passed: { tone: 'success', variant: 'fill', icon: 'circle-check', label: 'Passed' },
+    'in-range': { tone: 'success', variant: 'fill', icon: 'circle-check', label: 'In range' },
+    graded: { tone: 'success', variant: 'fill', icon: 'check', label: 'Graded' },
+    issue: { tone: 'error', variant: 'fill', icon: 'circle-x', label: 'Issue' },
+    'graded-low': { tone: 'error', variant: 'fill', icon: 'arrow-down', label: 'Graded low' },
+    'graded-high': { tone: 'error', variant: 'fill', icon: 'arrow-up', label: 'Graded high' },
+    'off-target': { tone: 'error', variant: 'fill', icon: 'circle-alert', label: 'Off target' },
+    failed: { tone: 'error', variant: 'fill', icon: 'ban', label: 'Failed' },
+    'needs-target': { tone: 'error', variant: 'fill', icon: 'circle-alert', label: 'Needs a target' },
+    improvement: { tone: 'warn', variant: 'fill', icon: 'triangle-alert', label: 'Improvement' },
+    'out-of-date': { tone: 'warn', variant: 'fill', icon: 'clock', label: 'Out of date' },
+    unstable: { tone: 'info', variant: 'fill', icon: 'shuffle', label: 'Unstable' },
+    ready: { tone: 'info', variant: 'fill', icon: 'circle-dot', label: 'Ready' },
+    'not-checked': { tone: 'neutral', variant: 'dot', label: 'Not checked' },
+    skipped: { tone: 'neutral', variant: 'fill', icon: 'minus', label: 'Skipped' },
+    'not-graded': { tone: 'neutral', variant: 'fill', icon: 'circle', label: 'Not graded' },
+    'no-target': { tone: 'neutral', variant: 'fill', icon: 'circle', label: 'No target' },
   }
 
   class TvStatusTag extends HTMLElement {
     static get observedAttributes() {
-      return ['kind', 'tone', 'variant', 'icon', 'no-icon', 'label']
+      return ['kind', 'tone', 'variant', 'icon', 'no-icon', 'label', 'busy']
     }
     constructor() {
       super()
@@ -106,11 +136,17 @@
       const iconName = this.hasAttribute('no-icon') ? '' : this.getAttribute('icon') || kindDef.icon || ''
 
       const isDot = variant === 'dot'
-      const glyph = isDot
-        ? '<span class="dot" aria-hidden="true"></span>'
-        : iconName
-          ? `<span class="ic" aria-hidden="true"><i class="${window.__tvIcon ? window.__tvIcon(iconName) : 'icon-' + iconName}"></i></span>`
-          : ''
+      // `busy` swaps whatever glyph the kind would show for a spinner, so an
+      // in-flight status (converting, grading, re-running) is the SAME chip as
+      // its settled state rather than a second pill built alongside it.
+      const busy = this.hasAttribute('busy')
+      const glyph = busy
+        ? '<span class="spin" aria-hidden="true"></span>'
+        : isDot
+          ? '<span class="dot" aria-hidden="true"></span>'
+          : iconName
+            ? `<span class="ic" aria-hidden="true"><i class="${window.__tvIcon ? window.__tvIcon(iconName) : 'icon-' + iconName}"></i></span>`
+            : ''
 
       const bg = isDot ? 'transparent' : t.bg
       const bd = isDot ? 'transparent' : t.bd
@@ -125,6 +161,13 @@
           } /* type via .tv-tag; tone colour/bg/border applied inline (dynamic, outranks role) */
           .ic{ display:inline-flex; align-items:center; font-size:12px; line-height:1; }
           .dot{ width:7px; height:7px; border-radius:9999px; background:currentColor; display:inline-block; }
+          .spin{
+            width:11px; height:11px; border-radius:9999px; display:inline-block; flex:none;
+            border:2px solid currentColor; border-right-color:transparent;
+            animation:tv-tag-spin 800ms linear infinite;
+          }
+          @keyframes tv-tag-spin{ to{ transform:rotate(360deg); } }
+          @media (prefers-reduced-motion: reduce){ .spin{ animation-duration:2.4s; } }
           .label:empty{ display:none; }
         </style>
         <span class="chip tv-tag" style="color:${t.fg};background:${bg};border:0.5px solid ${bd};">${glyph}<span class="label">${label || ''}</span></span>

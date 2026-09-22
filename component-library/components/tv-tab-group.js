@@ -32,10 +32,25 @@
       this.attachShadow({ mode: 'open' })
     }
     connectedCallback() {
+      // If a page set `.value` before this element upgraded (the component
+      // scripts load asynchronously, so any inline script that runs during
+      // parsing gets there first), that assignment created an own data
+      // property which now SHADOWS the accessor below. The attribute is then
+      // never written, attributeChangedCallback never fires, _sync() never
+      // runs — and clicking a tab moves the panel but not the underline.
+      // Re-apply the value through the setter so it reflects to the attribute.
+      this._upgradeProperty('value')
       this.render()
       this.addEventListener('click', this._onClick)
       // sync after children upgrade
       requestAnimationFrame(() => this._sync())
+    }
+    _upgradeProperty(prop) {
+      if (Object.prototype.hasOwnProperty.call(this, prop)) {
+        const value = this[prop]
+        delete this[prop]
+        this[prop] = value
+      }
     }
     attributeChangedCallback() {
       if (this.shadowRoot) this._sync()

@@ -1,0 +1,2336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Traverse Studio — Checks</title>
+<meta name="description" content="Checks on a test, in two tabs: Sample calibration (synthetic sample grading) and Checks (rubric checks). Studio design system rebuild of the 17 and 21 Sep 2026 developer POCs — same behaviour, Traverse UI, one surface.">
+<link rel="stylesheet" href="../../design-system/colors_and_type.css">
+<link rel="stylesheet" href="../../fonts/lucide/lucide.css">
+<link rel="stylesheet" href="checks.css">
+<script src="../../component-library/tv-components.js"></script>
+<link rel="icon" type="image/png" href="../../assets/logos/studio_square_light.png">
+<style>
+/* =========================================================================
+   CHECKS — one surface, two tabs
+
+     Sample calibration   synthetic sample grading   (POC, 17 Sep 2026)
+     Checks               rubric checks              (POC, 21 Sep 2026)
+
+   Both tabs share one test-editor shell, one severity language (the tone
+   table in checks.css), one set of primitives, and one toast host. Shared
+   primitives live in checks.css; only per-surface styles are below.
+
+   THE ONE RULE FOR EDITING THIS FILE
+   The two surfaces' class namespaces are deliberately DISJOINT — there is no
+   collision between them today, and each surface's classes are used inside
+   its own tv-modal-card bodies, which render OUTSIDE the tab panels. That is
+   why neither block is scoped under a panel id: scoping would break the
+   modals. If you add a class, keep it in its own block and keep it unique.
+
+   Rebuild notes vs the POCs:
+     · the two private token ramps are gone; everything reads
+       colors_and_type.css. Four reds and four greens became one of each, and
+       the checks accent moved from primary-700 to primary-600
+     · ORANGE IS REMOVED. Out of date / draft / attention are warn yellow
+     · INDIGO IS NOT A SEVERITY. Mixed / contested / unstable is info sky;
+       primary is actions, links and the active tab only
+     · the auto dark mode, Source Serif 4, the hand-drawn SVG icons and the
+       Unicode glyph layer are all gone — Lucide throughout
+     · ten hand-rolled overlays are four tv-modal-cards
+   ========================================================================= */
+
+/* ---------- shared editor shell ---------- */
+.editor-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.panel[hidden] { display: none !important; }
+
+/* =========================================================================
+   TAB 1 — SAMPLE CALIBRATION
+   (the .editor* rules below are the shared shell, kept with this block
+   because that is where they were authored)
+   ========================================================================= */
+/* =========================================================================
+   Quality checks — surface styles
+
+   Shared primitives live in checks.css (tone table, marks, code chips, run
+   chips, bars, tables, toast, tooltip, icon button). Only what is specific to
+   THIS surface is below.
+
+   Rebuild notes vs the POC:
+     · the bespoke --s/--p/--ok/--er/--or/--tl ramps are gone; everything reads
+       colors_and_type.css. Four reds and four greens collapse to one of each
+     · ORANGE IS REMOVED. Out of date / draft / attention are warn yellow,
+       which is the system's attention colour
+     · INDIGO IS NO LONGER A SEVERITY. "Unstable / mixed / contested" is info
+       sky; primary is for actions, links and the active tab only
+     · the 32 hand-drawn 2px SVG icons are Lucide at the system's weight, and
+       the ● / ○ tab dots are gone
+     · five chip systems (.pill .tag .chip .badge .bandpill) collapse to
+       <tv-status-tag> + .ck-code + .ck-runchip
+     · seven hand-rolled modals are one <tv-modal-card>
+     · the editor tab strip is <tv-tab-group> (underline), matching the live
+       test editor; the Sample/Category switch is the sub-nav pill pattern
+   ========================================================================= */
+
+/* ---------- editor shell ---------- */
+.editor {
+  max-width: 1180px; margin: 24px auto 0;
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.editor-head { padding: 16px 24px 0; border-bottom: 1px solid var(--border-subtle); }
+.editor-title {
+  display: flex; align-items: center; gap: 12px; margin: 0;
+  font: var(--text-h1-weight) var(--text-h1-size)/var(--text-h1-leading) var(--font-sans);
+  letter-spacing: var(--text-h1-tracking); color: var(--fg-1);
+}
+.editor-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.editor-body { padding: 24px; min-height: 520px; }
+.qc { display: flex; flex-direction: column; gap: 16px; }
+.qc-title { margin: 0; font: var(--text-h3-weight) var(--text-h3-size)/var(--text-h3-leading) var(--font-sans); color: var(--fg-1); }
+.qc-intro { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-sm); line-height: 1.6; color: var(--fg-2); }
+
+/* ---------- toolbar ---------- */
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px; border: 1px solid var(--border-subtle);
+  background: var(--bg-subtle); border-radius: var(--radius-lg);
+}
+.toolbar .rightside { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--fs-xs); color: var(--fg-3); }
+.metrics .dot { color: var(--surface-300); }
+.tolbtn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 4px 12px; border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle); background: var(--bg-subtle);
+  font: 500 var(--fs-xs)/1.4 var(--font-sans); color: var(--fg-2);
+  transition: background var(--dur-quick) var(--ease-std), border-color var(--dur-quick) var(--ease-std), color var(--dur-quick) var(--ease-std);
+}
+.tolbtn:hover { border-color: var(--primary-300); background: var(--primary-50); color: var(--primary-700); }
+
+/* the Sample / Category switch — sub-navigation, so it is the pill pattern the
+   test editor already uses for Settings/Grading and Results/Moderation */
+.viewtoggle {
+  display: inline-flex; gap: 2px; padding: 4px;
+  background: var(--surface-100); border-radius: var(--radius-full);
+}
+.viewtoggle button {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 6px 14px; border: 0; border-radius: var(--radius-full);
+  background: none; font: 500 var(--fs-xs)/1 var(--font-sans); color: var(--fg-2);
+  transition: color var(--dur-base) var(--ease-std), background var(--dur-base) var(--ease-std);
+}
+.viewtoggle button:hover { color: var(--fg-1); }
+.viewtoggle button[aria-checked="true"] { background: var(--surface-0); color: var(--fg-1); box-shadow: var(--shadow-xs); }
+
+/* ---------- overflow menu ---------- */
+.menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 40;
+  min-width: 232px; padding: 6px;
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+}
+.menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer;
+  padding: 8px 10px; border: 0; border-radius: var(--radius-sm);
+  background: none; text-align: left; font: 400 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-1);
+  transition: background var(--dur-quick) var(--ease-std);
+}
+.menu button:hover:not(:disabled) { background: var(--surface-100); }
+.menu button:disabled { color: var(--fg-4); cursor: not-allowed; }
+.menu button i { color: var(--fg-3); font-size: 15px; }
+.menu button:disabled i { color: var(--fg-4); }
+.menu .sep { height: 1px; background: var(--border-subtle); margin: 4px 0; }
+
+/* ---------- empty state ---------- */
+.empty { width: 100%; max-width: 768px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-canvas); overflow: hidden; }
+.empty .halves { display: grid; grid-template-columns: 1fr 1fr; }
+.empty .half { display: flex; flex-direction: column; padding: 20px; }
+.empty .half + .half { border-left: 1px solid var(--border-subtle); }
+.empty .hic {
+  display: grid; place-items: center; flex: none; width: 40px; height: 40px;
+  border-radius: var(--radius-md); background: var(--primary-50); color: var(--primary-600); font-size: 18px;
+}
+.empty h3 { margin: 0; font: var(--text-h5-weight) var(--text-h5-size)/var(--text-h5-leading) var(--font-sans); color: var(--fg-1); }
+.empty p { margin: 12px 0 0; flex: 1; font-size: var(--fs-sm); line-height: 1.6; color: var(--fg-2); }
+.empty .cta { margin-top: 20px; align-self: flex-start; }
+.empty .foot { padding: 12px 20px; border-top: 1px solid var(--border-subtle); background: var(--bg-subtle); font-size: var(--fs-xs); color: var(--fg-3); }
+
+/* ---------- progress ---------- */
+.progress { padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-canvas); }
+
+/* ---------- sample rows ---------- */
+.sample-cell { display: flex; align-items: center; gap: 8px; }
+.sample-cell .src { flex: none; font-size: 20px; color: var(--fg-3); }
+.sample-cell .meta { padding-left: 8px; font-size: var(--fs-xs); color: var(--fg-3); }
+.sample-cell .rhs { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; align-self: center; }
+.sub { padding: 12px 16px 16px; background: var(--bg-subtle); border-top: 1px solid var(--surface-100); }
+.statement-row td { padding: 6px 12px 6px 32px; font-size: var(--fs-xs); }
+.foot-note { margin-top: 12px; font-size: var(--fs-xs); color: var(--fg-3); }
+.foot-note.big { font-size: var(--fs-sm); }
+.stale-row th { background: var(--warn-100); border-bottom: 1px solid color-mix(in srgb, var(--warn-600) 28%, var(--surface-0)); text-transform: none; letter-spacing: normal; font-weight: 400; padding: 8px 12px; }
+.stale-note { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-xs); line-height: 1.5; color: var(--warn-600); }
+.lvl { display: flex; align-items: center; gap: 10px; }
+.lvl .t { font: 500 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-1); }
+.lvl .n { font-size: var(--fs-xs); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runlist { list-style: none; margin: 0; padding: 0; }
+.runlist > li { padding: 12px 0; font-size: var(--fs-xs); border-top: 1px solid var(--border-subtle); }
+.runlist > li:first-child { border-top: 0; padding-top: 0; }
+.runlist > li:last-child { padding-bottom: 0; }
+.runlist .line { display: flex; align-items: flex-start; gap: 12px; }
+.runlist .rl { width: 64px; flex: none; font-weight: 500; color: var(--fg-1); }
+.runlist .rm { width: 80px; flex: none; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.runlist .rc { width: 112px; flex: none; color: var(--fg-3); white-space: nowrap; }
+.runlist .rat { margin: 4px 0 0; padding-left: 28px; color: var(--fg-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.linkbtn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;
+  padding: 2px 6px; border: 0; border-radius: var(--radius-sm); background: none;
+  font: 500 var(--fs-xs)/1.4 var(--font-sans); color: var(--primary-600);
+  transition: background var(--dur-quick) var(--ease-std);
+}
+.linkbtn:hover { background: var(--primary-50); color: var(--primary-700); }
+
+/* ---------- modal bodies ---------- */
+.field-row { display: grid; grid-template-columns: 35% auto; gap: 32px; align-items: start; }
+.field-row.wide { grid-template-columns: 75% auto; }
+.field-row .lbl { font: 600 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-1); }
+.field-row .desc { margin-top: 4px; font-size: var(--fs-xs); color: var(--fg-3); }
+.sect h4 { margin: 0 0 6px; text-transform: uppercase; font: var(--text-eyebrow-weight) var(--text-eyebrow-size)/var(--text-eyebrow-leading) var(--font-sans); letter-spacing: var(--text-eyebrow-tracking); color: var(--fg-3); }
+.box {
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  background: var(--bg-subtle); font-size: var(--fs-sm); line-height: 1.6; color: var(--fg-2);
+  white-space: pre-wrap;
+}
+.box.dashed { border-style: dashed; border-color: var(--border-default); background: var(--surface-0); }
+.box.ink { color: var(--fg-1); }
+.drop {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
+  padding: 24px; text-align: center;
+  border: 1px dashed var(--border-default); border-radius: var(--radius-lg); background: var(--bg-subtle);
+  transition: border-color var(--dur-quick) var(--ease-std), background var(--dur-quick) var(--ease-std);
+}
+.drop:hover { border-color: var(--border-strong); background: var(--surface-100); }
+.drop .dic { font-size: 40px; color: var(--surface-300); }
+.staged { display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.staged .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bandchip {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 6px 12px; border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle); background: var(--surface-0); color: var(--fg-3);
+  font: 600 var(--fs-xs)/1.4 var(--font-sans);
+  transition: background var(--dur-quick) var(--ease-std), border-color var(--dur-quick) var(--ease-std), color var(--dur-quick) var(--ease-std);
+}
+.bandchip:hover { border-color: var(--border-default); background: var(--bg-subtle); color: var(--fg-2); }
+/* mark bands are a SCALE, not a severity — they read on the neutral ramp with
+   the brand accent marking what is selected, so they cannot be mistaken for
+   the pass / issue / attention language used everywhere else on this tab */
+.bandchip[aria-pressed="true"] { border-color: var(--primary-600); background: var(--primary-50); color: var(--primary-700); box-shadow: var(--shadow-xs); }
+.bandpill {
+  display: inline-flex; padding: 2px 8px; border-radius: var(--radius-full);
+  background: var(--bg-muted); color: var(--fg-2); font: 500 var(--fs-xs)/1.4 var(--font-sans);
+}
+.targets-mark { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-subtle); }
+.tlist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-canvas); overflow: hidden; }
+.tlist li { padding: 12px; border-top: 1px solid var(--border-subtle); }
+.tlist li:first-child { border-top: 0; }
+.tlist .ttl { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.tlist .ttl p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; font: 500 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-1); }
+.checkbox {
+  display: inline-grid; place-items: center; flex: none; width: 16px; height: 16px; margin-top: 2px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-xs);
+  background: var(--surface-0); color: transparent; cursor: pointer; font-size: 11px;
+}
+.checkbox[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: var(--fg-inverse); }
+.md-editor textarea {
+  width: 100%; min-height: 50vh; resize: none; overflow: hidden; padding: 16px;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  background: var(--surface-0); color: var(--fg-1);
+  font: 400 var(--fs-sm)/1.625 var(--font-sans); overflow-wrap: anywhere;
+}
+.md-editor textarea:focus-visible { outline: none; border-color: var(--border-focus); box-shadow: var(--shadow-ring-primary); }
+.modal-tabs { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); }
+
+/* ---------- range slider ---------- */
+.slider { position: relative; padding-top: 20px; user-select: none; }
+.slider .out {
+  position: absolute; top: 0; transform: translateX(-50%);
+  padding: 2px 6px; border-radius: var(--radius-xs);
+  background: var(--surface-800); color: var(--fg-inverse);
+  font: 500 var(--fs-xs)/1 var(--font-sans); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.slider .tr { position: relative; height: 20px; }
+.slider .track { position: absolute; left: 0; right: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: var(--radius-full); background: var(--surface-200); }
+.slider .fill { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); border-radius: var(--radius-full); background: var(--primary-500); }
+.slider .h {
+  position: absolute; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%);
+  border-radius: var(--radius-full); background: var(--surface-0); border: 2px solid var(--primary-600);
+  box-shadow: var(--shadow-xs); cursor: grab;
+}
+.slider .h:focus-visible { outline: none; box-shadow: var(--shadow-ring-primary); }
+
+@media (max-width: 760px) {
+  .empty .halves { grid-template-columns: 1fr; }
+  .empty .half + .half { border-left: 0; border-top: 1px solid var(--border-subtle); }
+  .field-row, .field-row.wide { grid-template-columns: 1fr; gap: 12px; }
+  .editor { margin: 12px 16px 0; }
+  .editor-head, .editor-body { padding-left: 16px; padding-right: 16px; }
+  .ck-tablewrap, .ck-subtable { overflow-x: auto; }
+}
+
+/* =========================================================================
+   TAB 2 — CHECKS
+   ========================================================================= */
+/* =========================================================================
+   Checks panel — surface styles
+
+   Shared primitives live in checks.css (tone table, marks, bars, tables,
+   toast, tooltip). Only what is specific to THIS surface is below.
+
+   Rebuild notes vs the POC:
+     · the bespoke --ground/--ink/--accent ramp is gone; everything reads
+       colors_and_type.css, so the accent is primary-600 (the POC ran on
+       primary-700) and the neutrals are the real surface ramp
+     · the auto dark mode is removed
+     · Source Serif 4 is removed — one family, --font-sans
+     · every Unicode glyph (✕ ! ✓ ✦ ↺ ‹ › × ▶) is a Lucide icon
+     · the half-pixel type ladder (10.5 … 14.5 … 34) is the --fs-* ladder
+     · the revisit bounce is a fade+rise on --dur-base/--ease-std
+   ========================================================================= */
+
+/* ---------- header ---------- */
+/* ---------- run card ----------
+   The panel's header, shown in every run state. Title + status on the left,
+   the run button pinned right; the row below it swaps between the intro copy
+   (before a run) and the run's meta line (after one), so the button itself
+   never moves. */
+.runcard {
+  padding: 24px;
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+}
+.runcard__head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.runcard__title { margin: 0; font: var(--text-h3-weight) var(--text-h3-size)/var(--text-h3-leading) var(--font-sans); color: var(--fg-1); }
+.runcard__intro { margin: 16px 0 0; max-width: 68ch; font-size: var(--fs-sm); line-height: 1.6; color: var(--fg-2); }
+.runcard__meta {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px 32px; margin-top: 16px;
+}
+.runcard__meta .head__count b { font-size: var(--fs-2xl); }
+
+.head { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.head h1 { margin: 0; font: var(--text-h1-weight) var(--text-h1-size)/var(--text-h1-leading) var(--font-sans); letter-spacing: var(--text-h1-tracking); color: var(--fg-1); }
+.head__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; font-size: var(--fs-xs); color: var(--fg-3); }
+.head__count { text-align: right; }
+.head__count b { display: block; font: var(--text-stat-weight) var(--text-stat-size)/var(--text-stat-leading) var(--font-sans); letter-spacing: var(--text-stat-tracking); font-variant-numeric: tabular-nums; }
+.head__count span { display: block; margin-top: 4px; }
+
+/* ---------- tiles ---------- */
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.tile {
+  position: relative;
+  display: flex; flex-direction: column; gap: 12px;
+  width: 100%; padding: 16px; text-align: left; cursor: pointer;
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--dur-base) var(--ease-std), border-color var(--dur-base) var(--ease-std);
+}
+/* cards swap sm → md on hover; they never translate or scale */
+.tile:hover { box-shadow: var(--shadow-md); border-color: var(--border-default); }
+.tile:focus-visible { outline: none; box-shadow: var(--shadow-ring-primary); }
+.tile__head { display: flex; align-items: center; gap: 8px; }
+.tile__head h3 { margin: 0; font: var(--text-h5-weight) var(--text-h5-size)/var(--text-h5-leading) var(--font-sans); color: var(--fg-1); }
+.tile__q { margin: 0; font-size: var(--fs-xs); color: var(--fg-3); }
+.tile__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
+.tile__tally { margin: 0; font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.tile__fix {
+  border: 0; background: none; cursor: pointer;
+  padding: 4px 8px; margin: -4px -8px; border-radius: var(--radius-sm);
+  font: 600 var(--fs-xs)/1.2 var(--font-sans); color: var(--primary-600);
+  transition: background var(--dur-quick) var(--ease-std);
+}
+.tile__fix:hover { background: var(--accent-tint); color: var(--primary-700); }
+
+/* the way back to decisions already taken */
+.tile__fade { display: flex; flex-direction: column; gap: 12px; transition: opacity var(--dur-base) var(--ease-std); }
+.tile--revisitable:hover .tile__fade,
+.tile--revisitable:focus-within .tile__fade { opacity: 0.25; }
+.tile__revisit {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-items: center; border-radius: var(--radius-lg);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+.tile:hover .tile__revisit, .tile:focus-within .tile__revisit { opacity: 1; pointer-events: auto; }
+.tile__revisit--empty { background: color-mix(in srgb, var(--surface-0) 86%, transparent); }
+.tile__none {
+  padding: 8px 16px; border-radius: var(--radius-full);
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm); font-size: var(--fs-xs); color: var(--fg-3);
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 8px 16px; border-radius: var(--radius-full);
+  background: var(--bg-canvas); border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+  font: 600 var(--fs-sm)/1.2 var(--font-sans); color: var(--fg-1);
+  transition: background var(--dur-quick) var(--ease-std), color var(--dur-quick) var(--ease-std), border-color var(--dur-quick) var(--ease-std);
+}
+.pill:hover { border-color: var(--primary-600); color: var(--primary-700); background: var(--bg-subtle); }
+/* a fade + short rise, on the system curve. The POC overshot four times. */
+@media (prefers-reduced-motion: no-preference) {
+  .tile:hover .tile__revisit .pill,
+  .tile:focus-within .tile__revisit .pill { animation: revisit-in var(--dur-base) var(--ease-std) both; }
+}
+@keyframes revisit-in { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- bands ---------- */
+.bands { margin-top: 32px; border-top: 1px solid var(--border-subtle); }
+.band { border-bottom: 1px solid var(--border-subtle); }
+.band__toggle {
+  display: flex; width: 100%; align-items: center; gap: 8px;
+  padding: 12px 4px; border: 0; background: none; cursor: pointer; text-align: left;
+}
+.band__toggle[disabled] { cursor: default; }
+.band__toggle i { color: var(--fg-3); font-size: 14px; transition: transform var(--dur-base) var(--ease-std); }
+.band__toggle[aria-expanded="true"] i { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .band__toggle i { transition: none; } }
+.band__label { font: 600 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-2); }
+.band__n { font: 600 var(--fs-sm)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--t-fg); }
+.band__n--zero { color: var(--fg-3); opacity: 0.55; }
+.band__dealt { font-size: var(--fs-xs); color: var(--fg-3); }
+.band__body { padding-bottom: 12px; }
+.band__body[hidden] { display: none; }
+
+.findings, .checks { list-style: none; margin: 0; padding: 0; }
+.finding {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 12px; border: 0; border-top: 1px solid var(--surface-100); background: none;
+  transition: background var(--dur-quick) var(--ease-std);
+}
+.findings > li:first-child .finding { border-top: 0; }
+.finding:hover { background: var(--bg-subtle); }
+.finding__main { flex: 1 1 380px; min-width: 0; }
+.finding__title { display: flex; align-items: center; gap: 8px; font: 600 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-1); }
+.finding__msg { display: block; margin: 4px 0 0 24px; font-size: var(--fs-xs); color: var(--fg-3); }
+.finding__state { display: block; margin: 4px 0 0 24px; font: 500 var(--fs-xs)/1.4 var(--font-sans); color: var(--t-fg); }
+.checks li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px; }
+.check__title { flex: 1 1 240px; min-width: 0; font-size: var(--fs-sm); }
+.check__detail { flex: 2 1 240px; min-width: 0; font-size: var(--fs-xs); color: var(--fg-3); }
+.check__model {
+  padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xs);
+  font-family: var(--font-mono); font-size: var(--fs-3xs); color: var(--fg-3); white-space: nowrap;
+}
+
+/* ---------- subject chip ---------- */
+/* the page sits on --bg-page (surface-100), so a surface-100 chip would be
+   invisible against it — it reads as a card, like everything else here */
+.chip {
+  display: inline-flex; align-items: baseline; gap: 8px; max-width: 100%;
+  padding: 4px 12px; border-radius: var(--radius-full);
+  background: var(--surface-0); border: 1px solid var(--border-subtle);
+  color: var(--fg-2); font-size: var(--fs-xs);
+}
+.chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip__q { flex: none; color: var(--fg-3); }
+
+/* ---------- card bodies ---------- */
+.gitem { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--surface-100); }
+.glist { list-style: none; margin: 0; padding: 0; }
+.glist > li:first-child .gitem { border-top: 0; }
+.gitem__text { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); color: var(--fg-1); }
+.gitem__aside { color: var(--fg-3); }
+.gitem__aside--help { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.readout {
+  max-height: 176px; overflow-y: auto;
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font: 400 var(--fs-sm)/1.55 var(--font-sans); color: var(--fg-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+textarea.readout {
+  width: 100%; min-height: 104px; max-height: 240px; resize: vertical;
+  color: var(--fg-1); background: var(--surface-0); border-color: var(--border-default);
+}
+textarea.readout:focus-visible { outline: none; border-color: var(--border-focus); box-shadow: var(--shadow-ring-primary); }
+.why {
+  border: 0; background: none; cursor: pointer;
+  padding: 4px 8px; margin: -4px -8px; border-radius: var(--radius-sm);
+  font: 600 var(--fs-xs)/1.2 var(--font-sans); color: var(--primary-600);
+  transition: background var(--dur-quick) var(--ease-std);
+}
+.why:hover { background: var(--accent-tint); }
+.reasons { margin: 0; padding-left: 20px; color: var(--fg-3); font-size: var(--fs-xs); }
+.reasons[hidden] { display: none; }
+.reasons li + li { margin-top: 4px; }
+.where { margin: 0; font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.msg { margin: 0; max-width: 75ch; font-size: var(--fs-sm); color: var(--fg-1); }
+
+/* one past decision */
+.dec { display: flex; flex-direction: column; gap: 12px; }
+.dec + .dec { border-top: 1px solid var(--surface-100); margin-top: 16px; padding-top: 16px; }
+.dec__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dec__where { font: 600 var(--fs-sm)/1.4 var(--font-sans); color: var(--fg-1); }
+.dec__when { font-size: var(--fs-xs); color: var(--fg-3); }
+.dec__msg { margin: 0; max-width: 75ch; font-size: var(--fs-sm); color: var(--fg-2); }
+.dec__check {
+  margin: 0; text-transform: uppercase;
+  font: var(--text-eyebrow-weight) var(--text-eyebrow-size)/var(--text-eyebrow-leading) var(--font-sans);
+  letter-spacing: var(--text-eyebrow-tracking); color: var(--fg-3);
+}
+ins.diff { background: var(--success-100); color: var(--success-600); text-decoration: none; border-radius: var(--radius-xs); padding: 0 2px; }
+del.diff { background: var(--error-100); color: var(--error-500); text-decoration: line-through; text-decoration-color: currentColor; border-radius: var(--radius-xs); padding: 0 2px; }
+
+/* the step control slotted into the card footer */
+.step { display: inline-flex; align-items: center; gap: 4px; }
+.step__pos { min-width: 64px; text-align: center; font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  .tiles { grid-template-columns: 1fr; }
+  .head__count { text-align: left; }
+}
+</style>
+</head>
+<body class="ck-page">
+
+<script type="application/json" id="prototype-manifest">
+{
+  "prototype": "checks",
+  "entries": [
+    {
+      "label": "Checks — Sample calibration",
+      "url": "/checks/?tab=calibration",
+      "screen": "sample-calibration",
+      "group": "Checks",
+      "description": "Synthetic sample grading: generate or upload sample scripts, grade them against the live rubric, and read the verdict per sample or per rubric category. Studio UI rebuild of the 17 Sep 2026 POC — behaviour unchanged."
+    },
+    {
+      "label": "Checks — rubric checks",
+      "url": "/checks/?tab=checks",
+      "screen": "checks",
+      "group": "Checks",
+      "description": "Rubric checks on a test: check-group tiles, findings by severity, the fix queue, and the way back to decisions already taken. Studio UI rebuild of the 21 Sep 2026 POC — behaviour unchanged."
+    }
+  ]
+}
+</script>
+
+<!-- =========================================================================
+     DEMO CHROME — scaffolding for the design team, deliberately OUTSIDE the
+     product frame. One bar per tab; the router shows the active one.
+     ========================================================================= -->
+<div class="ck-mockbar" id="cal-mockbar">
+  <span class="mk">Mockup</span>
+  <label>Scenario <select id="scenario"></select></label>
+  <label>Rubric
+    <select id="rubricSel">
+      <option value="level">Level-based (Database Design, /60)</option>
+      <option value="points">Points-based (Financial Reporting, /40)</option>
+    </select>
+  </label>
+  <span class="msep"></span>
+  <span class="mk">Open modal</span>
+  <div class="mgroup" id="modalButtons"></div>
+  <span class="msep"></span>
+  <button class="mbtn" data-mock="expandAll">Expand all rows</button>
+  <button class="mbtn" data-mock="toast">Show a toast</button>
+</div>
+<div class="ck-mockbar" id="chk-mockbar" hidden>
+  <span class="mk">Mockup</span>
+  <span style="color:var(--surface-300)">Checks · 21 Sep 2026</span>
+  <span class="msep"></span>
+  <span class="mk">Try</span>
+  <div class="mgroup">
+    <button class="mbtn" data-mock="revisit">Revisit decisions (Marking consistency)</button>
+    <button class="mbtn" data-mock="fix">Fix issues (Coverage)</button>
+    <button class="mbtn" data-mock="group">Open a check group</button>
+    <button class="mbtn" data-mock="reset">Reset to not checked</button>
+  </div>
+</div>
+<div class="ck-mocknote" id="cal-note">
+  <b>Sample calibration · synthetic grading, phase 1 (as built, 17 Sep 2026).</b>
+  Mock data only — nothing here calls an API. Every number on screen is derived from the mock results by the same rules the app uses (verdicts, level achieved, diagnosis, category behaviour), so the views stay consistent when you click around. Use the bar above to switch scenario, rubric type, and to open any modal directly. A full index of views and modals is at the bottom of the page.
+</div>
+<div class="ck-mocknote" id="chk-note" hidden>
+  <b>Checks, as built 21 Sep 2026.</b>
+  Mock data only — nothing here calls an API. Approving, ignoring and Fix all issues change this page and nothing else.
+  The panel opens not checked: press <b>Run checks</b> to reveal the results, after which the same button reads Re-run checks.
+  Then: Marking consistency is finished, so its tile offers the way back to the 42 changes approved there, newest first, with the wording each one replaced.
+  Coverage and Fairness each still have a finding open — Fix issues works through it, and the tile then turns green with its own way back.
+  One payload of mock results, so a re-run returns the same findings.
+</div>
+
+<!-- =========================================================================
+     TEST EDITOR SHELL — shared by both tabs. Settings and Grading are inert
+     in this mockup, so they are disabled rather than switching to an empty
+     panel. The title follows the active tab, because the two POCs carry mock
+     data for two different tests.
+     ========================================================================= -->
+<div class="editor">
+  <div class="editor-head">
+    <h1 class="editor-title"><span id="editorTitle">Database Design Fundamentals</span><tv-status-tag kind="draft"></tv-status-tag></h1>
+    <div class="editor-row">
+      <tv-tab-group value="calibration" id="editorTabs">
+        <tv-tab value="settings" icon="settings" label="Settings" disabled></tv-tab>
+        <tv-tab value="grading" icon="clipboard-check" label="Grading" disabled></tv-tab>
+        <tv-tab value="calibration" icon="flask-conical" label="Sample calibration"></tv-tab>
+        <tv-tab value="checks" icon="list-checks" label="Checks"></tv-tab>
+      </tv-tab-group>
+      <div class="ck-flex" style="padding-bottom:12px">
+        <span class="ck-caption">All changes saved</span>
+        <tv-button variant="primary" size="sm" disabled>Save</tv-button>
+      </div>
+    </div>
+  </div>
+  <div class="editor-body">
+
+    <section class="screen panel" data-screen="sample-calibration" data-status="wip" id="panel-cal">
+      <div class="qc" id="qc"></div>
+    </section>
+
+    <section class="screen panel" data-screen="checks" data-status="wip" id="panel-chk" hidden>
+
+      <!-- The run card. Present in every state, which is what keeps the run
+           button in one position: only the row beneath it changes (the intro
+           before a run, the run's own meta after it). -->
+      <div class="runcard">
+        <!-- Head row: title, status, run button. NOTHING here varies in width
+             or height between run states, which is what holds the button
+             still. The open count lives in the meta row below, not here. -->
+        <div class="runcard__head">
+          <h2 class="runcard__title">Checks</h2>
+          <span id="status-tag"></span>
+          <span class="ck-grow"></span>
+          <tv-button id="run-checks" variant="primary" icon="play">Run checks</tv-button>
+        </div>
+        <p class="runcard__intro" id="chk-intro">Checks the rubric and questions against marking best practice. Fix anything raised by editing the record it names, then re-run until every item passes.</p>
+        <div class="runcard__meta" id="chk-meta" hidden>
+          <div class="head__meta" style="margin-top:0">
+            <span id="last-checked"></span>
+            <span>File submission · Level-based rubric</span>
+            <span id="checks-run"></span>
+          </div>
+          <p class="head__count"><b id="open-count">0</b><span class="ck-eyebrow">Awaiting you</span></p>
+        </div>
+      </div>
+
+      <div class="tiles" id="tiles" hidden></div>
+      <div class="bands" id="bands" hidden></div>
+    </section>
+
+  </div>
+</div>
+
+<!-- Sample calibration: one card, one open at a time. A prompt replaces the
+     body rather than stacking a second card, per the modal-card rulebook. -->
+<tv-modal-card id="qc-modal"></tv-modal-card>
+
+<!-- Checks: the group list, the fix queue, and the way back to decisions. -->
+<tv-modal-card id="group-modal" size="md" icon="list-checks" cancel-label="Close"></tv-modal-card>
+
+<tv-modal-card id="fix-modal" size="lg" icon="sparkles"
+               cancel-label="Ignore" cancel-closes="false" primary-label="Approve change">
+  <div>
+    <span class="chip" id="fix-chip"></span>
+    <p class="where" id="fix-where" style="margin-top:8px"></p>
+    <p class="msg" id="fix-msg" style="margin-top:8px"></p>
+    <span class="ck-bar ck-bar--fill ck-bar--lg" id="fix-bar" style="margin-top:12px"></span>
+    <p class="ck-note" id="fix-banner" hidden style="margin-top:12px"></p>
+    <div id="fix-proposal" style="margin-top:12px">
+      <div class="field" style="margin-bottom:12px">
+        <span class="ck-eyebrow">Current</span>
+        <div class="readout" id="fix-current"></div>
+      </div>
+      <div class="field">
+        <div class="field__head">
+          <label class="ck-eyebrow" for="fix-proposed">Proposed change</label>
+          <button class="why" type="button" id="fix-why" aria-expanded="false" aria-controls="fix-reasons">Why this change</button>
+        </div>
+        <ul class="reasons" id="fix-reasons" hidden></ul>
+        <textarea class="readout" id="fix-proposed" rows="4"></textarea>
+      </div>
+    </div>
+    <p class="ck-note" id="fix-note" hidden style="margin-top:12px"></p>
+  </div>
+  <div class="step" slot="footer-start" id="fix-step">
+    <button class="ck-iconbtn ck-iconbtn--sm" type="button" id="fix-prev" aria-label="Previous issue"><i class="icon-chevron-left"></i></button>
+    <span class="step__pos" id="fix-pos" aria-live="polite"></span>
+    <button class="ck-iconbtn ck-iconbtn--sm" type="button" id="fix-next" aria-label="Next issue"><i class="icon-chevron-right"></i></button>
+  </div>
+</tv-modal-card>
+
+<tv-modal-card id="decisions-modal" size="md" icon="history"
+               subtitle="What you approved and ignored here, newest first"
+               cancel-label="View all" cancel-closes="false" primary-label="Done">
+  <div id="decisions-body"></div>
+  <div class="step" slot="footer-start" id="decisions-step">
+    <button class="ck-iconbtn ck-iconbtn--sm" type="button" id="decisions-prev" aria-label="Previous decision"><i class="icon-chevron-left"></i></button>
+    <span class="step__pos" id="decisions-pos" aria-live="polite"></span>
+    <button class="ck-iconbtn ck-iconbtn--sm" type="button" id="decisions-next" aria-label="Next decision"><i class="icon-chevron-right"></i></button>
+  </div>
+</tv-modal-card>
+
+<div class="ck-toasts" id="toasts"></div>
+<div class="ck-index" id="cal-index"></div>
+<tv-status-ribbon></tv-status-ribbon>
+
+<script src="quality-checks.data.js"></script>
+<script src="quality-checks.logic.js"></script>
+<script src="checks-panel.data.js"></script>
+<script>
+/* ==========================================================================
+ * SHARED — helpers both tabs use, and the tab router.
+ *
+ * Each feature below runs in its own IIFE, so the two POCs keep their own
+ * `state`, `render`, `counts`, `queue` and so on without colliding. They read
+ * their fixtures from the three data/logic scripts above (top-level `const`s
+ * are visible inside the IIFEs) and register themselves on FEATURES so the
+ * router can repaint the tab it shows and title the shell.
+ * ========================================================================== */
+const FEATURES = {}
+const PANELS = { calibration: 'panel-cal', checks: 'panel-chk' }
+let activeTab = 'calibration'
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
+
+/* One toast host for both tabs — bottom right, per the design system. */
+function toast(heading, message, tone = 'brand') {
+  const icons = { pass: 'circle-check', warn: 'triangle-alert', issue: 'circle-x', brand: 'info' }
+  const el = document.createElement('div')
+  el.className = 'ck-toast'; el.setAttribute('data-tone', tone); el.setAttribute('role', 'status')
+  el.innerHTML = `<span class="ck-toast__ic" aria-hidden="true"><i class="icon-${icons[tone] || icons.brand}"></i></span>` +
+    `<span class="ck-grow"><b>${esc(heading)}</b>${message ? `<span>${esc(message)}</span>` : ''}</span>`
+  document.getElementById('toasts').appendChild(el); setTimeout(() => el.remove(), 5000)
+}
+
+/* One test, one title. The two fixtures happen to name different tests; the
+   shell carries the calibration one (which tracks its rubric switch), so the
+   title does not change under you when you move between tabs. Anywhere a
+   fixture repeats its own test name is re-pointed at this, for the same
+   reason — see subjectOf() in the Checks feature. */
+let shellTitle = 'Database Design Fundamentals'
+function setShellTitle(title) { shellTitle = title; applyShellTitle() }
+function applyShellTitle() { document.getElementById('editorTitle').textContent = shellTitle }
+
+function setTab(tab) {
+  if (!PANELS[tab]) tab = 'calibration'
+  activeTab = tab
+  for (const [t, id] of Object.entries(PANELS)) document.getElementById(id).hidden = t !== tab
+  document.getElementById('cal-mockbar').hidden = tab !== 'calibration'
+  document.getElementById('chk-mockbar').hidden = tab !== 'checks'
+  document.getElementById('cal-note').hidden = tab !== 'calibration'
+  document.getElementById('chk-note').hidden = tab !== 'checks'
+  document.getElementById('cal-index').hidden = tab !== 'calibration'
+  // Set the ATTRIBUTE, not the property: this runs during parsing, before the
+  // component scripts have loaded, and assigning `.value` on a not-yet-upgraded
+  // element creates an own property that shadows the accessor for good.
+  const tabs = document.getElementById('editorTabs')
+  if (tabs.getAttribute('value') !== tab) tabs.setAttribute('value', tab)
+  if (FEATURES[tab]) FEATURES[tab].render()
+  applyShellTitle()
+  const url = new URL(location.href)
+  url.searchParams.set('tab', tab)
+  history.replaceState(null, '', url)
+}
+document.getElementById('editorTabs').addEventListener('tv-change', e => setTab(e.detail.value))
+</script>
+
+<script>
+/* ==========================================================================
+ * TAB 1 — SAMPLE CALIBRATION  (synthetic sample grading)
+ * ========================================================================== */
+;(() => {
+/* ==========================================================================
+ * ICONS — Lucide, the repo's FontAwesome Pro substitute. The POC hand-drew 32
+ * SVG paths at 2px stroke; these are the system's own set at its own weight.
+ * The map keeps the POC's call sites (`icon('wand')`) working unchanged.
+ * ========================================================================== */
+const ICONS = {
+  wand: 'sparkles', upload: 'upload', fileUp: 'file-up', file: 'file', play: 'play',
+  rotate: 'rotate-cw', rotateLeft: 'rotate-ccw', trash: 'trash-2', dots: 'ellipsis-vertical',
+  sliders: 'sliders-horizontal', chevron: 'chevron-right', check: 'check',
+  circleCheck: 'circle-check', circle: 'circle', arrowUp: 'arrow-up', arrowDown: 'arrow-down',
+  shuffle: 'shuffle', warn: 'triangle-alert', circleExcl: 'circle-alert', info: 'info',
+  clock: 'clock', pen: 'pencil', eye: 'eye', quote: 'quote', x: 'x', floppy: 'save',
+}
+function icon(name, cls = '') { return `<i class="icon-${ICONS[name] || name} ${cls}" aria-hidden="true"></i>` }
+
+/* ==========================================================================
+ * THE SEVERITY VOCABULARY
+ *
+ * Every verdict, status and category state maps onto a <tv-status-tag> kind,
+ * which maps onto the shared tone table (see checks.css). Both this tab and
+ * the checks panel read the same table, so a colour means the same thing on
+ * either.
+ *
+ * Two changes from the POC, both deliberate:
+ *   · "unstable / mixed / contested" was INDIGO. Indigo is the brand accent
+ *     and sat next to real primary buttons on the same row. It is now info sky.
+ *   · "out of date / draft / off target" was ORANGE, which is not a semantic
+ *     token. It is now warn yellow, the system's attention colour.
+ * ========================================================================== */
+const VERDICT_KIND = {
+  perfect: 'in-range', ok: 'in-range', under: 'graded-low', over: 'graded-high',
+  flux: 'unstable', none: 'no-target', error: 'failed', pending: 'not-graded',
+}
+const CAT_KIND = {
+  perfect: 'in-range', ok: 'in-range', low: 'graded-low', high: 'graded-high',
+  off: 'off-target', unstable: 'unstable', none: 'not-graded',
+}
+// rollup / breakdown state → shared tone name
+const STATE_TONE = { on: 'pass', miss: 'issue', mixed: 'unstable', off: 'none' }
+
+function tag(attrs) {
+  const a = Object.entries(attrs)
+    .filter(([, v]) => v !== null && v !== undefined && v !== false)
+    .map(([k, v]) => (v === true ? k : `${k}="${esc(v)}"`)).join(' ')
+  return `<tv-status-tag ${a}></tv-status-tag>`
+}
+
+/* ==========================================================================
+ * STATE
+ * ========================================================================== */
+const state = {
+  rubric: 'level', scenarioKey: 'results', view: 'samples', repeatCount: 3,
+  expanded: new Set(), openRuns: new Set(), openCats: new Set(), openCatSamples: new Set(),
+  menuOpen: false, modal: null, data: null,
+}
+function rubricFor() { return state.rubric === 'points' ? RUBRIC_POINTS : RUBRIC_LEVEL }
+function loadScenario() {
+  state.data = SCENARIOS[state.scenarioKey].build()
+  state.expanded = new Set(); state.openRuns = new Set(); state.openCatSamples = new Set()
+  state.openCats = new Set([flattenRubricCategories(rubricFor())[0]?.id].filter(Boolean))
+  state.menuOpen = false
+}
+function ctx() {
+  const { overview, results } = state.data
+  const gen = overview.latestGeneration, run = overview.latestRun
+  const activeRun = gen?.status === 'processing' ? gen : (run?.status === 'processing' ? run : null)
+  let stateName = 'results'
+  if (overview.samples.length === 0) stateName = 'empty'; else if (activeRun) stateName = 'running'; else if (!overview.latestRun) stateName = 'ready'
+  const toleranceMarks = toleranceMarksFor(overview.test.maxAvailablePoints, overview.settings.tolerancePercentage)
+  const isPoints = overview.test.rubricType === 'points-based'
+  return { overview, results, activeRun, stateName, toleranceMarks, isPoints, rubric: rubricFor(), remaining: Math.max(0, overview.maxSamples - overview.sampleCount), staleCount: overview.samples.filter(s => s.isOutOfDate).length }
+}
+
+/* ==========================================================================
+ * RENDER — the tab
+ * ========================================================================== */
+function render() {
+  const c = ctx()
+  setShellTitle(c.isPoints ? 'Financial Reporting Case Study' : 'Database Design Fundamentals')
+  const parts = []
+  if (c.overview.isOutOfDate) parts.push(renderBanner(c))
+  parts.push(renderHeader(c))
+  if (c.stateName === 'empty') parts.push(renderEmpty(c))
+  else {
+    if (c.activeRun) parts.push(renderProgress(c.activeRun))
+    parts.push(`<div class="ck-stack">${renderMetricsRow(c)}${state.view === 'samples' ? renderSamples(c) : renderCategories(c)}</div>`)
+  }
+  document.getElementById('qc').innerHTML = parts.join('')
+  renderModal()
+}
+
+const REASON_LABELS = { rubric: 'a category, level or statement changed', rubricType: 'the rubric type changed', categoryScoreAllocation: 'the category score allocation changed', categoryScoreWeighting: 'the category score weighting changed', maxAvailablePoints: 'the maximum available points changed', sampleEdited: 'a sample was edited after it was graded', targetsEdited: "a sample's category targets were changed after it was graded", targetChanged: "a sample's target mark was changed after it was graded" }
+function renderBanner(c) {
+  const reasons = c.overview.outOfDateReasons; const count = c.staleCount
+  const noun = `${count} sample${count === 1 ? '' : 's'}`, verb = count === 1 ? 'was' : 'were'
+  const rubricChanged = reasons.some(r => !isSampleOnlyStaleness([r])), edited = reasons.some(r => isSampleOnlyStaleness([r]))
+  const heading = rubricChanged && edited ? `${noun} ${verb} graded against an older rubric, or changed since.` : edited ? `${noun} ${verb} changed after being graded.` : `${noun} ${verb} graded against an older rubric.`
+  const labels = reasons.map(r => REASON_LABELS[r] ?? r)
+  // A tinted note, not a card with a 4px accent bar down its left edge.
+  return `<section class="ck-note" data-tone="warn" aria-label="Notification banner" style="padding:16px">
+    <span style="font-size:20px;line-height:1">${icon('clock')}</span>
+    <div class="ck-grow">
+      <p style="margin:0;font-weight:600">${esc(heading)}</p>
+      <p class="ck-note__body" style="margin:4px 0 0">${labels.length ? `Detected: ${esc(labels.join(', '))}.` : ''} Run grades ${count === 1 ? 'it' : 'them'} again and leaves current results as they are. Context files replaced in place at the same key are not detected.</p>
+    </div></section>`
+}
+
+function renderHeader(c) {
+  const { overview, stateName } = c
+  const isRunning = stateName === 'running', isEmpty = stateName === 'empty'
+  const isFull = overview.sampleCount >= overview.maxSamples
+  const hasReady = overview.samples.some(s => s.conversionStatus === 'complete')
+  const pending = overview.pendingCount
+  const runLabel = isRunning ? 'Running…' : pending > 0 ? `Run ${pending} pending` : 'Re-run all'
+  const runTip = isRunning ? 'A run is in progress' : !hasReady ? 'No sample is ready to grade yet' : pending > 0 ? 'Grades samples that are new, failed, or graded against an older rubric. Current results stay.' : 'Every sample is current. Grade them all again.'
+  const tm = c.toleranceMarks
+  const tolLabel = `±${overview.settings.tolerancePercentage}% of its target` + (tm === null ? '' : ` (${tm} marks on ${overview.test.maxAvailablePoints})`)
+  const intro = isEmpty
+    ? `<div class="qc-intro"><p style="margin:0">Grade sample scripts against the rubric as it stands and see whether the marks land where they should.</p><p style="margin:0">A sample counts as in range when its grade lands within ${esc(tolLabel)} — change that in <button class="ck-link" data-act="openSettings">Tolerance &amp; defaults</button>.</p></div>`
+    : `<p class="qc-intro" style="margin:4px 0 0">Grade sample scripts against the rubric as it stands and see whether the marks land where they should.</p>`
+  const menu = state.menuOpen ? `<div class="menu">
+      <button data-act="openSettings">${icon('sliders')}Tolerance &amp; defaults</button>
+      <button data-act="rerunAll" ${isRunning || !hasReady ? 'disabled' : ''}>${icon('rotate')}Re-run all samples</button>
+      <div class="sep"></div>
+      <button data-act="openDeleteAll" ${overview.sampleCount === 0 ? 'disabled' : ''}>${icon('trash')}Delete all samples</button>
+    </div>` : ''
+  const toolbar = overview.sampleCount > 0 ? `<div class="toolbar">
+      <div class="ck-flex">
+        <tv-button variant="secondary" size="sm" icon="upload" data-act="openUpload" ${isRunning || isFull ? 'disabled' : ''}>Upload</tv-button>
+        <tv-button variant="secondary" size="sm" icon="sparkles" data-act="openGenerate" ${isRunning || isFull ? 'disabled' : ''}>Generate</tv-button>
+        ${isFull ? `<span class="ck-caption">All ${overview.maxSamples} slots used</span>` : ''}
+      </div>
+      <div class="rightside">
+        <select class="ck-input ck-input--sm ck-select" style="width:96px" data-act="repeat" aria-label="Repeats per sample">${[1, 3, 5].map(n => `<option value="${n}" ${state.repeatCount === n ? 'selected' : ''}>×${n}</option>`).join('')}</select>
+        <span class="ck-tip ck-tip--right" data-tip="${esc(runTip)}" tabindex="0">
+          <tv-button variant="primary" size="sm" icon="${pending > 0 ? 'play' : 'rotate-cw'}" data-act="run" ${isRunning || !hasReady ? 'disabled' : ''}>${esc(runLabel)}</tv-button>
+        </span>
+      </div>
+    </div>` : ''
+  return `<div class="ck-stack">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div class="ck-grow"><h2 class="qc-title">Sample calibration</h2>${intro}</div>
+      <div style="position:relative">
+        <button class="ck-iconbtn" aria-label="Sample calibration options" aria-haspopup="menu" aria-expanded="${state.menuOpen}" data-act="menu">${icon('dots')}</button>${menu}
+      </div>
+    </div>${toolbar}</div>`
+}
+
+function renderEmpty(c) {
+  return `<div class="empty"><div class="halves">
+    <div class="half"><div class="ck-flex" style="gap:12px"><span class="hic">${icon('wand')}</span><h3>Generate sample scripts</h3></div>
+      <p>Write synthetic submissions across the mark range, each aimed at a target mark, then grade them with the live rubric.</p>
+      <div class="cta"><tv-button variant="primary" icon="sparkles" data-act="openGenerate">Generate samples</tv-button></div></div>
+    <div class="half"><div class="ck-flex" style="gap:12px"><span class="hic">${icon('upload')}</span><h3>Upload marked scripts</h3></div>
+      <p>Already have scripts with known marks? Upload them (PDF, Word or markdown) with the mark each one should get.</p>
+      <div class="cta"><tv-button variant="primary" icon="upload" data-act="openUpload">Upload samples</tv-button></div></div>
+  </div><p class="foot">Up to ${c.overview.maxSamples} samples either way. Nothing is graded until you run a check.</p></div>`
+}
+
+function renderProgress(run) {
+  const done = run.completedPasses + run.failedPasses
+  const pct = run.totalPasses ? Math.max(5, Math.round(done / run.totalPasses * 100)) : 5
+  return `<div class="progress">
+    <div class="ck-flex" style="justify-content:space-between">
+      <span style="font-weight:500;color:var(--fg-1)">${run.kind === 'generation' ? 'Writing sample scripts…' : 'Grading samples…'}</span>
+      <span style="color:var(--fg-2)">${done} of ${run.totalPasses}${run.failedPasses > 0 ? ` · ${run.failedPasses} failed` : ''}</span>
+    </div>
+    <div class="ck-track" style="margin-top:8px"><div class="ck-fill" style="width:${pct}%"></div></div>
+    <p class="ck-caption" style="margin:8px 0 0">You can leave this tab; progress is saved on the server.</p></div>`
+}
+
+function renderMetricsRow(c) {
+  const { overview } = c
+  const noStmts = rubricLacksGradingStatements(c.rubric, overview.test.rubricType)
+  return `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px">
+    <div class="viewtoggle" role="radiogroup" aria-label="Sample calibration views">
+      <button type="button" role="radio" aria-checked="${state.view === 'samples'}" class="ck-tip" data-tip="Each sample, its verdict, and its category breakdown" data-act="view" data-view="samples">Sample view</button>
+      <button type="button" role="radio" aria-checked="${state.view === 'categories'}" class="ck-tip" data-tip="Each rubric category, the samples graded against it, and their runs" data-act="view" data-view="categories">Category view</button>
+    </div>
+    <div class="metrics"><span>${overview.sampleCount} of ${overview.maxSamples} samples</span><span class="dot">·</span>
+      <button class="tolbtn ck-tip" data-tip="Change the tolerance and run defaults" data-act="openSettings">${icon('sliders')}±${overview.settings.tolerancePercentage}% tolerance</button>
+      ${c.toleranceMarks !== null ? `<span>${c.toleranceMarks} marks on ${overview.test.maxAvailablePoints}</span>` : ''}
+      ${noStmts ? `<span class="dot">·</span><span class="ck-flex" style="gap:6px;color:var(--warn-600)">No grading statements ${ihint("This rubric's levels have no grading statements, and the grader is never given level descriptions — it sees only level titles and points. Adding grading statements to each category level would greatly improve the grading.")}</span>` : ''}
+    </div></div>`
+}
+function ihint(text) { return `<button type="button" class="ck-hint ck-tip" data-tip="${esc(text)}">${icon('info')}<span class="ck-sr">${esc(text)}</span></button>` }
+
+/* ---------------- Sample view ---------------- */
+function sampleStatus(sample, agg) {
+  const gen = sample.source === 'generated'
+  const grading = agg.passes.some(p => ['processing', 'queued', 'in-progress'].includes(p.status))
+  const needsTarget = !gen && sample.targetScore == null
+  if (sample.conversionStatus === 'error') return { kind: 'failed', label: gen ? 'Generation failed' : 'Conversion failed', tip: sample.conversionError }
+  if (sample.conversionStatus === 'in-progress' || sample.conversionStatus === 'queued') return { tone: 'primary', label: gen ? 'Generating' : 'Converting', busy: true }
+  if (sample.conversionStatus !== 'complete') return { kind: 'skipped', label: cap(sample.conversionStatus) }
+  if (grading) return { tone: 'primary', label: 'Grading', busy: true }
+  if (needsTarget) return { kind: 'needs-target' }
+  if (sample.latestRunFailed) return { kind: 'failed', label: 'Grading failed' }
+  if (sample.latestRunId === null) return { kind: 'ready' }
+  return { kind: 'graded', dim: sample.isOutOfDate }
+}
+function statusTag(st) {
+  const chip = tag({ kind: st.kind, tone: st.tone, label: st.label, busy: st.busy })
+  const wrap = st.dim ? 'class="ck-dim"' : ''
+  if (st.tip) return `<span class="ck-tip" data-tip="${esc(st.tip)}" tabindex="0" ${wrap}>${chip}</span>`
+  return st.dim ? `<span ${wrap}>${chip}</span>` : chip
+}
+function stalePill(sample) {
+  const why = describeSampleStaleness(sample.outOfDateReasons)
+  const tip = why ? `${cap(why)} since it was graded. Re-run the sample to apply.` : 'These results are no longer current. Re-run the sample.'
+  return `<span class="ck-tip" data-tip="${esc(tip)}" tabindex="0">${tag({ kind: 'out-of-date' })}</span>`
+}
+
+function renderSamples(c) {
+  const { overview, results } = c
+  const aggregates = overview.samples.map(s => aggregateSample(s, results.passes))
+  const hasAnyResult = overview.samples.some(s => s.latestRunId !== null)
+  const tmText = c.toleranceMarks == null ? `${overview.settings.tolerancePercentage}%` : `${c.toleranceMarks} marks (${overview.settings.tolerancePercentage}%)`
+  const rows = aggregates.map(a => renderSampleRow(a, c) + (state.expanded.has(a.sample.id) ? `<tr><td colspan="5" style="padding:0;border-top:0">${renderBreakdown(a, c)}</td></tr>` : '')).join('')
+  return `<div class="ck-tablewrap"><table class="ck-table"><thead><tr><th>Sample</th><th>Target</th><th>Graded</th><th>Verdict</th><th class="ck-right" style="padding-right:0">Actions</th></tr></thead><tbody>${rows}</tbody></table>
+    ${hasAnyResult ? `<p class="foot-note">Accepted range is target ± ${esc(tmText)}. A generated sample with no target gets no verdict. Each row shows its most recent grading; re-running one sample leaves the others as they are.</p>`
+      : `<p class="foot-note big">No run yet. Uploaded samples need the mark you gave them; then click Run.</p>`}</div>`
+}
+
+function renderSampleRow(a, c) {
+  const s = a.sample; const gen = s.source === 'generated'
+  const isRunning = c.stateName === 'running'
+  const st = sampleStatus(s, a)
+  const needsTarget = !gen && s.targetScore == null
+  const isGradable = s.hasMarkdown && !needsTarget
+  const inFlight = !!st.busy
+  const grading = st.label === 'Grading'
+  const repeatCount = c.results.runs.find(r => r.id === s.latestRunId)?.repeatCount ?? 1
+  const bars = [...a.passes].sort((x, y) => x.repeatIndex - y.repeatIndex).flatMap(p => {
+    const label = `Repeat ${p.repeatIndex + 1}`
+    if (p.status === 'error') return [seg('none', `${label}: failed to grade`)]
+    if (p.status !== 'complete') return []
+    const sc = formatScore(p.scoreTotal)
+    if (p.withinTolerance === null) return [seg('none', `${label}: ${sc}, no target`)]
+    return [seg(p.withinTolerance ? 'pass' : 'issue', `${label}: ${sc}, ${p.withinTolerance ? 'in range' : 'out of range'}`)]
+  })
+  const isInRange = a.verdict === 'ok' || a.verdict === 'perfect'
+  const off = offIntentCategories(buildSampleBreakdown(a, c.overview.intents, c.rubric))
+  const targetHint = s.latestRunId === null ? "The mark you expect this sample to score. The grader's total is checked against it, give or take the tolerance." : 'The mark you expect this sample to score. Changing it does not change the results here — they were judged against the mark at the time. Re-run the sample to apply it.'
+  const targetsTip = gen ? 'Set what each rubric category is expected to score. This script was written to hit these targets — correct them if you have edited it since.' : 'Set what each rubric category is expected to score. Estimated from the target mark you gave it, and yours to change.'
+  const rerunTip = isRunning ? 'A run is in progress' : !s.hasMarkdown ? 'Not converted yet' : needsTarget ? 'Set a target mark first' : s.latestRunId ? 'Grade this sample again. Other results stay.' : 'Grade this sample'
+  const delTip = grading ? 'Being graded — wait for the run to finish' : inFlight ? (gen ? 'Being written — wait for generation to finish' : 'Being converted — wait for conversion to finish') : 'Delete sample'
+  const dimCls = s.isOutOfDate ? 'ck-dim' : ''
+  const expanded = state.expanded.has(s.id)
+  return `<tr class="ck-row" data-sample="${s.id}">
+    <td><div class="sample-cell">
+      <button class="ck-chev" data-act="toggleSample" data-id="${s.id}" ${a.passes.length === 0 ? 'disabled' : ''} aria-expanded="${expanded}" aria-label="Show breakdown">${icon('chevron')}</button>
+      <span class="src">${icon(gen ? 'wand' : 'fileUp')}</span>
+      <div class="ck-grow"><input class="ck-inline-input" value="${esc(s.label ?? '')}" placeholder="Untitled sample" aria-label="Sample name" data-act="renameSample" data-id="${s.id}">
+        <div class="meta">${describeBand(s.band) ? `${describeBand(s.band)} band · ` : ''}${esc(s.originalFileName ?? 'Generated markdown')}</div></div>
+      <div class="rhs">
+        ${s.hasDraft ? `<span class="ck-tip" data-tip="Changes to this sample are saved in this browser but not uploaded. Grading still reads the uploaded version — open the sample and close it again to upload them." tabindex="0">${tag({ kind: 'draft' })}</span>` : ''}
+        ${statusTag(st)}
+        ${s.isOutOfDate ? stalePill(s) : ''}
+        <tv-button variant="secondary" size="sm" icon="pencil" data-act="openSample" data-id="${s.id}" ${!s.hasMarkdown ? 'disabled' : ''}>Submission</tv-button>
+      </div></div></td>
+    <td><div class="ck-flex" style="gap:6px"><input class="ck-input ck-input--sm" style="width:80px" value="${s.targetScore ?? ''}" placeholder="${gen ? '–' : 'Required'}" aria-label="Target mark" ${needsTarget ? 'aria-invalid="true"' : ''} data-act="setTargetScore" data-id="${s.id}">${ihint(targetHint)}</div>
+      ${needsTarget ? `<div class="ck-caption" style="color:var(--error-500);margin-top:4px">Required for uploaded samples</div>` : ''}
+      <div style="margin-top:8px"><span class="ck-tip ck-tip--left" data-tip="${esc(targetsTip)}" tabindex="0"><tv-button variant="secondary" size="sm" icon="pencil" data-act="openTargets" data-id="${s.id}">Levels</tv-button></span></div></td>
+    <td class="ck-nowrap ${dimCls}">${a.mean != null ? `<span style="font-weight:500">${formatScore(a.mean)}</span><span class="ck-muted"> / ${formatScore(a.maxPoints)}</span>${repeatCount > 1 && a.min !== a.max ? ` <span class="ck-caption">(${formatScore(a.min)}–${formatScore(a.max)})</span>` : ''}` : '<span class="ck-muted">–</span>'}</td>
+    <td class="ck-nowrap ${dimCls}">${tag({ kind: VERDICT_KIND[a.verdict] })}
+      ${bars.length ? `<div class="ck-flex ck-caption" style="margin-top:6px"><span class="ck-bar ck-bar--steps">${bars.join('')}</span>${a.target != null ? `<span>${a.inRangeCount} of ${a.graded.length} in range</span>` : ''}</div>` : ''}
+      ${isInRange && off.off.length > 0 ? `<div class="ck-caption" style="color:var(--warn-600);margin-top:4px">${off.off.length} of ${off.total} categories off target</div>` : ''}</td>
+    <td class="ck-actions"><div style="display:flex;justify-content:flex-end;gap:4px">
+      <span class="ck-tip" data-tip="${esc(rerunTip)}" tabindex="0"><button class="ck-iconbtn" data-act="rerun" data-id="${s.id}" ${isRunning || !isGradable ? 'disabled' : ''} aria-label="Re-run this sample">${icon('rotate')}</button></span>
+      <span class="ck-tip ck-tip--right" data-tip="${esc(delTip)}" tabindex="0"><button class="ck-iconbtn" data-act="openDeleteSample" data-id="${s.id}" ${inFlight ? 'disabled' : ''} aria-label="Delete sample">${icon('trash')}</button></span></div></td></tr>`
+}
+
+function seg(tone, tip) { return `<span class="ck-seg ck-tip" data-tone="${tone}" data-tip="${esc(tip)}" tabindex="0"></span>` }
+
+function levelAchievedCell(cat, isPoints) {
+  const d = describeLevelAchieved(cat, isPoints); const mostly = repeatsMostlyPassed(cat)
+  let tone = 'none'
+  if (d.code != null) tone = d.mixed ? (mostly ? 'unstable' : 'issue') : d.tone === 'on' ? 'pass' : d.tone === 'off' ? 'issue' : 'none'
+  return `<div class="lvl"><span class="ck-code" data-tone="${tone}">${d.code ?? '–'}</span><div class="ck-grow">${d.title ? `<div class="t">${esc(d.title)}</div>` : ''}${d.note ? `<div class="n" style="color:${mostly ? 'var(--fg-3)' : 'var(--error-500)'}">${esc(d.note)}</div>` : ''}</div></div>`
+}
+function repeatBars(cat) {
+  return `<div class="ck-flex ck-caption"><span class="ck-bar ck-bar--steps">${cat.repeats.map(r => seg(r.pass ? 'pass' : 'issue', describeRepeatOutcome(r, cat))).join('')}</span><span>${passedRepeatCount(cat)} of ${cat.repeatCount}</span></div><div class="ck-caption" style="color:var(--fg-2);margin-top:4px">${formatRunOutcomes(cat)}</div>`
+}
+function targetCell(t, pillStyle) {
+  const d = describeTarget(t)
+  if (!d) return `<span class="ck-caption ck-muted">–</span>`
+  return `<span class="${pillStyle ? 'bandpill' : 'ck-caption'}" style="display:inline-flex;align-items:center;gap:4px;${pillStyle ? '' : 'color:var(--fg-2)'}">${esc(d.label)}${d.name ? ihint(d.name) : ''}</span>`
+}
+function scoreCell(cat, isPoints, card) {
+  const runs = !isPoints && cat.repeatCount > 1
+    ? `<div class="ck-runchips" style="margin-top:6px;justify-content:flex-end">${cat.repeats.map(r => `<span class="ck-runchip ck-tip" data-tip="Repeat ${r.repeatIndex + 1}" tabindex="0">${formatScore(r.score)}</span>`).join('')}</div>` : ''
+  return `<span style="font-weight:600">${formatScore(cat.meanScore)}</span><span class="ck-muted"> / ${formatScore(cat.maxPoints)}</span>${runs}`
+}
+function staleNotice(reasons, subject = 'this sample') {
+  const why = describeSampleStaleness(reasons)
+  const sentence = why ? `${cap(why)} since the last grading, so these results are no longer entirely valid.` : 'These results are no longer entirely valid.'
+  return `<p class="stale-note">${icon('clock')}<span><strong style="font-weight:600">Out of date.</strong> ${esc(sentence)} Re-run ${esc(subject)} to judge against what it says now.</span></p>`
+}
+
+function renderBreakdown(a, c) {
+  const breakdown = buildSampleBreakdown(a, c.overview.intents, c.rubric)
+  const isPoints = breakdown.some(x => x.statements !== null)
+  const idx = indexRubric(c.rubric)
+  if (breakdown.length === 0) {
+    return `<div class="sub"><div class="ck-empty"><span class="ck-empty__ic">${icon('circle')}</span><span class="ck-empty__body">${a.failed.length ? `Every repeat failed to grade. ${a.failed[0].error ? `<span style="color:var(--error-500)">${esc(a.failed[0].error)}</span>` : ''}` : 'No category grades to show yet.'}</span></div></div>`
+  }
+  const rows = breakdown.map(cat => {
+    const key = `${a.sample.id}:${cat.categoryId}`; const open = state.openRuns.has(key)
+    const rowTone = STATE_TONE[cat.state]
+    let html = `<tr ${rowTone && rowTone !== 'none' && cat.state !== 'on' ? `data-rowtone="${rowTone}"` : ''}>
+      <td><div class="ck-flex" style="gap:6px"><button class="ck-chev" data-act="toggleRuns" data-key="${key}" aria-expanded="${open}" aria-label="Show runs">${icon('chevron')}</button><span style="font-weight:500;color:var(--fg-1)">${esc(cat.title)}</span></div></td>
+      <td>${levelAchievedCell(cat, isPoints)}</td>
+      <td class="ck-nowrap">${repeatBars(cat)}</td>
+      <td class="ck-right ck-nowrap">${targetCell(cat, false)}</td>
+      <td class="ck-right ck-nowrap">${scoreCell(cat, isPoints, false)}</td></tr>`
+    for (const st of cat.statements ?? []) {
+      const all = st.awardedCount === cat.repeatCount, some = st.awardedCount > 0
+      // met / contested / not met — contested is info, never the brand indigo
+      const tone = all ? 'var(--success-600)' : some ? 'var(--info-500)' : 'var(--fg-4)'
+      html += `<tr class="statement-row"><td colspan="3" style="color:${all ? 'var(--fg-1)' : 'var(--fg-3)'}"><span style="display:inline-flex;gap:6px;align-items:flex-start"><span style="color:${tone};margin-top:2px">${icon(all ? 'check' : some ? 'shuffle' : 'circle')}</span><span>${esc(st.statement)}</span></span></td><td></td><td class="ck-right ck-caption">${formatScore(st.points)}</td></tr>`
+    }
+    if (open) html += `<tr><td colspan="5" style="background:var(--bg-subtle)">${renderRunList(a, cat, categoryRunsFor(a, cat.categoryId), idx.get(cat.categoryId)?.about ?? null)}</td></tr>`
+    return html
+  }).join('')
+  const diag = diagnoseSample(a, breakdown, c.toleranceMarks)
+  const diagHtml = diag ? `<div class="ck-note" data-tone="${diag.kind === 'flux' ? 'unstable' : 'issue'}" style="margin-top:12px">
+    <span style="font-size:16px;line-height:1;margin-top:1px">${icon(diag.kind === 'flux' ? 'shuffle' : 'warn')}</span>
+    <div class="ck-grow"><p style="margin:0;font-weight:500">${esc(diag.title)}</p>${diag.lines.length ? `<ul class="ck-note__body">${diag.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}${diag.suggestion ? `<p style="margin:6px 0 0;font-weight:500">${esc(diag.suggestion)}</p>` : ''}</div></div>` : ''
+  return `<div class="sub"><div class="ck-subtable"><table><thead>
+    ${a.sample.isOutOfDate ? `<tr class="stale-row"><th colspan="5">${staleNotice(a.sample.outOfDateReasons)}</th></tr>` : ''}
+    <tr><th>${isPoints ? 'Category and statements' : 'Category'}</th><th>${isPoints ? 'Awarded' : 'Level achieved'}</th><th>Achieved per run</th><th class="ck-right">Target</th><th class="ck-right">Score</th></tr></thead><tbody>${rows}</tbody></table></div>${diagHtml}</div>`
+}
+
+function renderRunList(a, rollup, runs, about) {
+  return `<ol class="runlist">${runs.map(run => {
+    const passed = rollup.repeats.find(r => r.passId === run.pass.id)?.pass ?? false
+    const g = run.grade; const desc = g.level != null ? about?.levels.find(l => l.level === g.level)?.description : null
+    return `<li><div class="line"><span class="ck-seg" data-tone="${passed ? 'pass' : 'issue'}" style="margin-top:6px;width:16px;flex:none"></span><span class="rl">Repeat ${run.pass.repeatIndex + 1}</span>
+      ${g.level != null ? `<span class="rm">${formatScore(g.scoreDisplay)} / ${formatScore(g.maxPoints)}</span>` : ''}
+      ${g.gradingConfidenceRating != null ? `<span class="rc">${g.gradingConfidenceRating}% confident</span>` : ''}
+      ${g.rationale ? `<button class="linkbtn" data-act="openRationale" data-sample="${a.sample.id}" data-cat="${rollup.categoryId}" data-pass="${run.pass.id}">${icon('quote')}<span>View full rationale</span></button>` : ''}
+      <span class="ck-grow ck-tip ck-tip--left" style="color:var(--fg-2)" ${desc ? `data-tip="${esc(desc)}" tabindex="0"` : ''}>${g.level != null ? `Level ${g.level}${g.levelTitle ? ` <span class="ck-muted">· ${esc(g.levelTitle)}</span>` : ''}` : `${formatScore(g.scoreDisplay)} / ${formatScore(g.maxPoints)}`}</span></div>
+      <p class="rat">${g.rationale ? esc(g.rationale) : '<span class="ck-muted">No rationale</span>'}</p></li>`
+  }).join('')}</ol>`
+}
+
+/* ---------------- Category view ---------------- */
+function rollupLabel(r) { switch (r?.state) { case 'on': return r.intendedLevel != null || r.intendedScore != null ? 'on target' : 'stable'; case 'miss': return 'off target'; case 'mixed': return 'unstable across repeats'; default: return 'not graded' } }
+function renderCategories(c) {
+  const cats = buildCategoryView(c.rubric, c.overview.samples, c.results.passes, c.overview.intents)
+  const isPoints = cats.some(cat => cat.entries.some(e => e.rollup?.statements != null)) || c.isPoints
+  const hasAny = cats.some(cat => cat.gradedCount > 0)
+  if (!cats.length) return `<div class="ck-empty"><span class="ck-empty__ic">${icon('circle')}</span><span class="ck-empty__title">No rubric categories yet</span><span class="ck-empty__body">This test has no rubric categories. Add them on the Grading tab.</span></div>`
+  const rows = cats.map(cat => {
+    const open = state.openCats.has(cat.categoryId)
+    const stale = cat.entries.filter(e => e.rollup !== null && e.sample.isOutOfDate).length
+    const code = categoryAwardCode(cat, isPoints)
+    const tone = code == null ? 'none' : ['perfect', 'ok'].includes(cat.state) ? 'pass' : ['low', 'high', 'off'].includes(cat.state) ? 'issue' : cat.state === 'unstable' ? 'unstable' : 'none'
+    let html = `<tr class="ck-row"><td style="width:60%"><div class="ck-flex" style="align-items:flex-start">
+        <button class="ck-chev" data-act="toggleCat" data-id="${cat.categoryId}" aria-expanded="${open}" aria-label="Show samples">${icon('chevron')}</button>
+        <div class="ck-grow"><div style="font-weight:500;color:var(--fg-1);overflow-wrap:anywhere">${esc(cat.title)}</div><div class="ck-caption">${cat.gradedCount > 0 ? `${cat.gradedSampleCount} of ${cat.entries.length} sample${cat.entries.length === 1 ? '' : 's'} graded · ${cat.gradedCount} grading${cat.gradedCount === 1 ? '' : 's'}${stale ? ` <span style="color:var(--warn-600)">· ${stale} out of date</span>` : ''}` : `${cat.entries.length} sample${cat.entries.length === 1 ? '' : 's'} · not graded yet`}</div></div></div></td>
+      <td class="ck-nowrap">${tag({ kind: CAT_KIND[cat.state] })}${cat.entries.length ? `<div class="ck-bar ck-bar--steps" style="margin-top:6px">${cat.entries.map(e => seg(STATE_TONE[e.rollup?.state] ?? 'none', `${e.sample.label ?? 'Untitled sample'}: ${rollupLabel(e.rollup)}`)).join('')}</div>` : ''}</td>
+      <td class="ck-nowrap"><span class="ck-code" data-tone="${tone}">${code ?? '–'}</span></td>
+      <td class="ck-right ck-nowrap" style="padding-right:4px"><span style="font-weight:600">${formatScore(cat.meanScore)}</span><span class="ck-muted"> / ${formatScore(cat.maxPoints)}</span><div class="ck-caption">mean per grading</div></td></tr>`
+    if (open) html += `<tr><td colspan="4" style="padding:0;border-top:0">${renderCategorySamples(cat, c, isPoints)}</td></tr>`
+    return html
+  }).join('')
+  return `<div class="ck-tablewrap"><table class="ck-table"><thead><tr><th>Category</th><th>Behaviour</th><th>${isPoints ? 'Scores awarded' : 'Levels awarded'}</th><th class="ck-right" style="padding-right:4px">Score</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="foot-note">${hasAny ? 'A category that gives every sample the same answer separates nothing; one that changes answer between repeats of the same script is not stable. Each sample counts by its most recent grading.' : 'Nothing is graded yet. Run the samples to see how each category behaves against them.'}</p></div>`
+}
+function renderCategorySamples(cat, c, isPoints) {
+  if (!cat.entries.length) return `<div class="sub"><div class="ck-empty"><span class="ck-empty__ic">${icon('file')}</span><span class="ck-empty__body">No samples yet. Upload or generate some to check this category.</span></div></div>`
+  const rows = cat.entries.map(e => {
+    const key = `${cat.categoryId}:${e.sample.id}`; const open = state.openCatSamples.has(key); const r = e.rollup; const s = e.sample
+    const sub = r && e.aggregate.mean != null ? `total ${formatScore(e.aggregate.mean)}${e.aggregate.target != null ? ` vs target ${formatScore(e.aggregate.target)}` : ''}` : s.targetScore != null ? `target ${formatScore(s.targetScore)}` : 'no target'
+    const dim = s.isOutOfDate ? 'ck-dim' : ''
+    const rowTone = STATE_TONE[r?.state]
+    let html = `<tr ${rowTone && rowTone !== 'none' && r?.state !== 'on' ? `data-rowtone="${rowTone}"` : ''}><td><div class="sample-cell">
+        <button class="ck-chev" data-act="toggleCatSample" data-key="${key}" ${e.runs.length === 0 ? 'disabled' : ''} aria-expanded="${open}" aria-label="Show runs">${icon('chevron')}</button>
+        <span class="src" style="font-size:18px">${icon(s.source === 'generated' ? 'wand' : 'fileUp')}</span>
+        <div class="ck-grow"><div class="ck-flex" style="gap:6px"><span class="ck-truncate" style="font-weight:500;color:var(--fg-1)">${esc(s.label || 'Untitled sample')}</span>${s.isOutOfDate ? stalePill(s) : ''}</div>
+          <div class="ck-caption">${describeBand(s.band) ? `${describeBand(s.band)} band · ` : ''}${sub}</div></div>
+        <div class="rhs"><tv-button variant="secondary" size="sm" icon="pencil" data-act="openSample" data-id="${s.id}" ${!s.hasMarkdown ? 'disabled' : ''}>Submission</tv-button></div></div></td>
+      ${r ? `<td class="${dim}">${levelAchievedCell(r, isPoints)}</td><td class="ck-nowrap ${dim}">${repeatBars(r)}</td>` : `<td colspan="2" class="ck-caption ck-muted">Not graded yet</td>`}
+      <td class="ck-right ck-nowrap">${targetCell(r ?? e.intent, true)}<div style="margin-top:8px;display:flex;justify-content:flex-end"><span class="ck-tip ck-tip--right" data-tip="The level this sample is expected to reach in each category" tabindex="0"><tv-button variant="secondary" size="sm" icon="pencil" data-act="openTargets" data-id="${s.id}">Levels</tv-button></span></div></td>
+      ${r ? `<td class="ck-right ck-nowrap ${dim}">${scoreCell(r, isPoints, true)}</td>` : '<td></td>'}</tr>`
+    if (r && open) html += `<tr><td colspan="5" style="background:var(--bg-subtle)">${renderRunList(e.aggregate, r, e.runs, cat.about)}</td></tr>`
+    return html
+  }).join('')
+  return `<div class="sub"><div class="ck-subtable"><table><thead><tr><th>Sample</th><th>${isPoints ? 'Awarded' : 'Level achieved'}</th><th>Achieved per run</th><th class="ck-right">Target</th><th class="ck-right">Score</th></tr></thead><tbody>${rows}</tbody></table></div></div>`
+}
+
+/* ==========================================================================
+ * MODALS — all seven are the one <tv-modal-card>. Each renderer returns the
+ * card's attributes plus its body; the card's own header and footer grammar
+ * (subject + marker, destructive-left / primary-right) is fixed by the
+ * component, which is the point of it.
+ * ========================================================================== */
+const modalCard = document.getElementById('qc-modal')
+
+function renderModal(bodyToo = true) {
+  const m = state.modal
+  if (!m) { if (modalCard.hasAttribute('open')) modalCard.close({ force: true }); return }
+  const c = ctx()
+  const fns = { generate: generateModal, upload: uploadModal, settings: settingsModal, sample: sampleModal, rationale: rationaleModal, deleteSample: deleteSampleModal, deleteAll: deleteAllModal }
+  const spec = fns[m.type](m, c)
+  const ATTRS = ['size', 'heading', 'subtitle', 'icon', 'marker-kind', 'marker-label', 'primary-label', 'primary-variant', 'danger-label', 'cancel-label', 'cancel-closes', 'footer-hint']
+  for (const k of ATTRS) {
+    const v = spec[k]
+    if (v == null || v === false) modalCard.removeAttribute(k)
+    else modalCard.setAttribute(k, v)
+  }
+  modalCard.confirmDisabled = !!spec.confirmDisabled
+  if (bodyToo) modalCard.innerHTML = spec.body
+  if (!modalCard.hasAttribute('open')) modalCard.open()
+}
+
+/* ---- Generate ---- */
+function generateModal(m, c) {
+  const remaining = m.remaining ?? Math.max(1, c.remaining); const maxCount = Math.min(5, remaining)
+  const scale = bandScale(); const chosen = scale.filter(b => m.bands.includes(b.value))
+  const slots = m.count >= 1 && chosen.length ? Array.from({ length: m.count }, (_, i) => { const band = chosen[i % chosen.length]; const key = `${i}:${band.value}`; const custom = m.windows[key]; return { index: i + 1, key, band, window: custom ?? band.window, custom: !!custom } }) : []
+  const hasCustom = slots.some(s => s.custom)
+  const body = `
+    <div class="field-row"><div><div class="lbl">How many</div><div class="desc">Up to ${remaining} more can be added to this test.</div></div>
+      <div><select class="ck-input ck-input--sm ck-select" style="width:96px" data-act="genCount">${Array.from({ length: maxCount }, (_, i) => `<option value="${i + 1}" ${m.count === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></div></div>
+    <div class="ck-stack" style="gap:8px"><div><div class="lbl">Mark bands</div><p class="desc">Samples are spread across the selected bands which you can adjust to suit your needs.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${scale.map(b => { const on = m.bands.includes(b.value); return `<button type="button" class="bandchip" aria-pressed="${on}" data-act="genBand" data-band="${b.value}">${icon(on ? 'check' : 'circle')}${b.name}</button>` }).join('')}</div>
+      ${chosen.length === 0 ? `<p class="ck-caption" style="color:var(--error-500)">Select at least one band.</p>` : ''}</div>
+    ${slots.length ? `<div class="ck-stack" style="gap:8px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px"><div><div class="lbl">Sample plan</div><p class="desc">Each sample's target mark is picked from inside its range. Drag a handle to change the range.</p></div>
+        ${hasCustom ? `<tv-button variant="text" size="sm" icon="rotate-ccw" data-act="genReset">Reset ranges</tv-button>` : ''}</div>
+      <div class="ck-subtable" style="overflow-x:auto"><table><thead><tr><th style="width:96px">Sample</th><th style="width:144px">Band</th><th>Target range</th><th class="ck-right" style="width:96px">Range</th></tr></thead><tbody>
+        ${slots.map(s => `<tr><td class="ck-caption">Sample ${s.index}</td><td><span class="bandpill">${s.band.name}</span></td>
+          <td style="padding-top:4px;padding-bottom:4px">${renderSlider(s.window, s.key)}</td>
+          <td class="ck-right ck-caption ck-tnum" style="${s.custom ? 'color:var(--fg-1);font-weight:600' : ''}">${formatPercentageWindow(s.window)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`
+  return { size: 'lg', icon: 'sparkles', heading: 'Generate sample scripts', subtitle: 'AI-generated submissions', 'primary-label': 'Generate', 'cancel-label': 'Cancel', confirmDisabled: !slots.length, body }
+}
+function renderSlider([lo, hi], key) {
+  const close = hi - lo < 12
+  const bubbles = close ? `<span class="out" style="left:${(lo + hi) / 2}%">${formatPercentageWindow([lo, hi])}</span>` : `<span class="out" style="left:${lo}%">${lo}%</span><span class="out" style="left:${hi}%">${hi}%</span>`
+  return `<div class="slider" data-slider="${key}" data-lo="${lo}" data-hi="${hi}">${bubbles}<div class="tr"><div class="track"></div><div class="fill" style="left:${lo}%;right:${100 - hi}%"></div><span class="h" style="left:${lo}%" data-handle="lo" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${lo}" aria-label="Lowest mark in the range"></span><span class="h" style="left:${hi}%" data-handle="hi" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${hi}" aria-label="Highest mark in the range"></span></div></div>`
+}
+
+/* ---- Upload ---- */
+function uploadModal(m, c) {
+  const remaining = m.remaining ?? Math.max(1, c.remaining); const all = m.staged.every(e => e.target != null)
+  const body = `<div class="drop" data-act="uploadAdd" role="button" tabindex="0">${icon('fileUp', 'dic')}<p style="margin:0;color:var(--fg-2)">Drop PDF, Word or markdown files here, or click to choose</p><p class="ck-caption" style="margin:0">Up to ${remaining} more · 100 MB each</p></div>
+    ${m.staged.length ? `<ul class="ck-stack" style="gap:8px;list-style:none;margin:0;padding:0">${m.staged.map((e, i) => `<li class="staged"><span class="ck-muted">${icon('file')}</span><span class="fn">${esc(e.name)}</span>
+      <div class="ck-flex" style="gap:4px;color:var(--fg-2)"><span>Target</span><input class="ck-input ck-input--sm" style="width:80px" value="${e.target ?? ''}" placeholder="Required" ${e.target == null ? 'aria-invalid="true"' : ''} aria-label="Target mark for ${esc(e.name)}" data-act="uploadTarget" data-index="${i}">${c.overview.test.maxAvailablePoints ? `<span>/ ${c.overview.test.maxAvailablePoints}</span>` : ''}</div>
+      <button class="ck-iconbtn ck-iconbtn--sm" data-act="uploadRemove" data-index="${i}" aria-label="Remove ${esc(e.name)}">${icon('x')}</button></li>`).join('')}</ul>
+      <p class="ck-caption" style="color:${all ? 'var(--fg-3)' : 'var(--error-500)'}">Every uploaded script needs the mark you gave it — that is what the run is checked against.</p>` : ''}`
+  return { size: 'md', icon: 'upload', heading: 'Upload sample scripts', subtitle: 'Scripts you have already marked', 'primary-label': `Upload${m.staged.length ? ' ' + m.staged.length : ''}`, 'cancel-label': 'Cancel', confirmDisabled: m.staged.length === 0 || m.staged.length > remaining || !all, body }
+}
+
+/* ---- Settings ---- */
+function toleranceWarning(m, c) {
+  const step = smallestLevelStep(c.rubric); const max = c.overview.test.maxAvailablePoints; const floor = toleranceFloorPercentage(step, max)
+  if (!(step != null && floor != null && max != null && m.tolerance != null && m.tolerance < floor)) return null
+  const marks = Math.round(m.tolerance / 100 * max * 10) / 10
+  return { floor, text: `±${formatScore(marks)} marks is less than one level step on this rubric (${formatScore(step)} marks), so a single category moving one level always lands out of range.` }
+}
+function settingsModal(m, c) {
+  const warn = toleranceWarning(m, c)
+  const valid = m.tolerance != null && Number.isInteger(m.tolerance) && m.tolerance >= 0 && m.tolerance <= 100
+  const body = `<div class="field-row wide"><div><div class="lbl">Tolerance</div><div class="desc">Percent of the test's maximum mark, applied as target ± tolerance to every sample. Changing it re-frames future runs, never past ones.</div></div>
+      <div class="ck-flex" style="gap:8px"><input class="ck-input" type="number" min="0" max="100" style="width:96px" value="${m.tolerance ?? ''}" aria-label="Tolerance percentage" data-act="setTolerance"><span style="color:var(--fg-2)">%</span></div></div>
+    <div id="tolWarn">${warn ? toleranceWarnHtml(warn) : ''}</div>
+    <div class="field-row wide"><div><div class="lbl">Default repeats</div><div class="desc">How many times each sample is graded when you click Run.</div></div>
+      <div><select class="ck-input ck-select" style="width:112px" data-act="setRepeat">${[1, 3, 5].map(n => `<option value="${n}" ${m.repeat === n ? 'selected' : ''}>×${n}</option>`).join('')}</select></div></div>`
+  return { size: 'md', icon: 'sliders-horizontal', heading: 'Tolerance & defaults', subtitle: 'Affects next grading runs', 'primary-label': 'Save', 'cancel-label': 'Cancel', confirmDisabled: !valid, body }
+}
+function toleranceWarnHtml(warn) {
+  return `<div class="ck-note" data-tone="warn">${icon('warn')}<div class="ck-grow"><span class="ck-note__body">${esc(warn.text)}</span>
+    <div style="margin-top:8px"><tv-button variant="secondary" size="sm" data-act="useFloor" data-floor="${warn.floor}">Use ${warn.floor}%</tv-button></div></div></div>`
+}
+
+/* ---- Sample modal (Sample tab = markdown editor · Targets tab) ---- */
+function markdownFor(sample, c) {
+  if (c.isPoints) return MD.points
+  if (sample.source === 'uploaded') return MD.uploaded
+  return MD[LEVEL_PLANS[sample.id]?.key ?? 'average'] ?? MD.average
+}
+function sampleModal(m, c) {
+  const s = c.overview.samples.find(x => x.id === m.sampleId); if (!s) return { body: '' }
+  const gen = s.source === 'generated'
+  const intents = c.overview.intents.filter(i => i.testSampleScriptId === s.id)
+  const graded = s.latestRunId != null
+  const grading = c.results.passes.some(p => p.testSampleScriptId === s.id && ['processing', 'queued', 'in-progress'].includes(p.status))
+  const dirty = m.draft !== m.server
+  const heading = s.label || 'Untitled sample'
+  const subtitle = s.targetScore != null ? `Target ${formatScore(s.targetScore)}` : 'No target mark'
+
+  // A prompt REPLACES the body — the rulebook rules out opening a card from a
+  // card, so what the POC stacked on top is a step within this one.
+  if (m.prompt === 'close') return {
+    size: 'sm', icon: 'save', heading: 'Save your changes?', subtitle: heading,
+    'danger-label': 'Discard changes', 'cancel-label': 'Keep editing', 'cancel-closes': 'false', 'primary-label': 'Save changes',
+    body: `<p style="margin:0;color:var(--fg-2)">Your changes to this sample have not been uploaded yet. Saving uploads them so the next grading reads them. It does not start a grading run, so you can come back and keep editing${graded ? ' — the current grading stays as it is until you re-run the sample' : ''}.</p>`,
+  }
+  if (m.prompt === 'grade') return {
+    size: 'sm', icon: 'play', heading: 'Save and grade this sample?', subtitle: heading,
+    'cancel-label': 'Cancel', 'cancel-closes': 'false', 'primary-label': 'Save and grade',
+    body: `<p style="margin:0;color:var(--fg-2)">${dirty ? 'The sample is uploaded again with your changes and graded on its own.' : 'The sample is graded again on its own.'}${graded ? ' Its current grading is replaced by the new run. Other samples are not affected.' : ''}</p>`,
+  }
+
+  const authored = intents.filter(i => i.source === 'authored').length
+  const origin = gen ? 'written by the generator' : 'estimated from the target mark'
+  const targetsCaption = intents.length === 0 ? 'No category targets yet' : authored > 0 ? `${authored} of ${intents.length} set by you · the rest ${origin}` : `${cap(origin)} · edit any category`
+  const sampleCaption = gen ? 'Generated sample · markdown as graded' : 'Uploaded sample · markdown as graded'
+  const tab = m.tab
+  let sampleBody
+  if (!s.hasMarkdown) sampleBody = `<div class="ck-empty">${s.conversionStatus === 'error'
+    ? `<span class="ck-empty__ic">${icon('warn')}</span><span class="ck-empty__body">${gen ? 'Generation failed' : 'Conversion failed'}${s.conversionError ? `: ${esc(s.conversionError)}` : '.'}</span>`
+    : `<span class="ck-spinner ck-spinner--lg" style="color:var(--primary-500)"></span><span class="ck-empty__body">${gen ? 'Still being written.' : 'Still being converted to markdown.'}</span>`}</div>`
+  else sampleBody = `${m.staleDraft ? `<div class="ck-note" data-tone="warn" style="margin-bottom:12px">${icon('warn')}<div class="ck-grow"><p style="margin:0;font-weight:500">This draft is based on an older version.</p><p class="ck-note__body" style="margin:4px 0 0">The sample has been uploaded again somewhere else since you saved this draft. Save &amp; grade would overwrite that newer version with what you see here.</p><div style="margin-top:8px"><tv-button variant="secondary" size="sm" data-act="discardDraft">Discard draft and reload the current version</tv-button></div></div></div>` : ''}
+    <div class="md-editor"><textarea spellcheck="false" aria-label="Sample markdown" data-act="draft" ${m.saving ? 'disabled' : ''}>${esc(m.draft)}</textarea></div>
+    <p class="ck-caption" style="margin-top:8px">Edit the markdown directly. <strong>Save</strong> keeps your changes in this browser and uploads them when you close this window. <strong>Save &amp; grade</strong> uploads the sample and grades it${graded ? ', replacing its current grading' : ''}.</p>`
+
+  const body = `<div>
+    <div class="modal-tabs">
+      <div class="viewtoggle" role="radiogroup" aria-label="Sample views">
+        <button type="button" role="radio" aria-checked="${tab === 'sample'}" data-act="sampleTab" data-tab="sample">Sample</button>
+        <button type="button" role="radio" aria-checked="${tab === 'targets'}" data-act="sampleTab" data-tab="targets">Targets</button>
+      </div>
+      <span class="ck-caption ck-truncate ck-grow">${esc(tab === 'targets' ? targetsCaption : sampleCaption)}</span></div>
+    <div style="padding-top:16px">${tab === 'targets' ? renderTargets(s, intents, c) : sampleBody}</div></div>
+    ${tab === 'sample' ? `<div slot="footer-start" class="ck-flex" style="gap:8px">
+      ${(dirty || m.hasLocalDraft) ? `<span class="ck-tip" data-tip="Throw these changes away and go back to the version the grader reads" tabindex="0"><tv-button variant="danger" size="sm" data-act="discardDraft">Discard changes</tv-button></span>` : ''}
+      <span class="ck-tip" data-tip="${dirty ? 'Keep these changes in this browser. They upload when you close this window.' : 'No changes since your last save'}" tabindex="0"><tv-button variant="secondary" size="sm" icon="save" data-act="saveLocal" ${dirty && m.draft.trim() ? '' : 'disabled'}>Save</tv-button></span>
+    </div>` : ''}`
+
+  const hint = tab === 'sample' ? (dirty ? 'Unsaved changes' : m.hasLocalDraft ? 'Draft saved — uploads when you close' : null) : null
+  return {
+    size: 'lg', icon: 'file', heading, subtitle, body,
+    'footer-hint': hint,
+    'cancel-label': 'Close',
+    'primary-label': tab === 'sample' ? 'Save & grade' : null,
+    confirmDisabled: c.stateName === 'running' || grading || !m.draft.trim(),
+  }
+}
+function renderTargets(s, intents, c) {
+  const gen = s.source === 'generated'; const isPoints = c.isPoints; const max = c.overview.test.maxAvailablePoints
+  const rows = editableRubricCategories(c.rubric, isPoints).map(cat => ({ cat, intent: intents.find(i => i.testGradingCategoryId === cat.id) ?? null }))
+  const srcLabel = src => src === 'authored' ? 'You' : src === 'estimated' ? 'Estimated' : src === 'generated' ? 'Generated' : 'Not set'
+  const srcTip = src => src === 'authored' ? 'Set by hand on this tab' : src === 'estimated' ? "Estimated from the sample's target mark" : src === 'generated' ? 'What the generator wrote this script to reach' : 'No target for this category yet'
+  // where a target came from is provenance, not severity — it stays on the
+  // neutral / brand end of the tone table
+  const srcTone = src => src === 'authored' ? 'primary' : src === 'estimated' ? 'info' : src === 'generated' ? 'info' : 'neutral'
+  const markCaption = s.latestRunId === null ? "What the whole script is expected to score. The grader's total is checked against it, give or take the tolerance." : 'Changing it does not change the results already shown — they were judged against the mark at the time. Re-run the sample to apply it.'
+  return `<div class="ck-stack">
+    <div class="targets-mark"><div class="ck-grow"><p style="margin:0;font-weight:600;color:var(--fg-1)">Target mark</p><p class="ck-caption" style="margin:2px 0 0">${markCaption}</p></div>
+      <div class="ck-flex" style="gap:6px"><input class="ck-input ck-input--sm" style="width:96px" value="${s.targetScore ?? ''}" placeholder="${gen ? '–' : 'Required'}" aria-label="Target mark" ${!gen && s.targetScore == null ? 'aria-invalid="true"' : ''} data-act="setTargetScore" data-id="${s.id}">${max != null ? `<span class="ck-muted">/ ${formatScore(max)}</span>` : ''}</div></div>
+    <p class="ck-caption" style="line-height:1.6">The level ${isPoints ? 'and statements ' : ''}each category is expected to reach, so the grader's verdict can be read category by category. ${gen ? 'Written into the script by the generator; change any category the script should be judged differently on — after editing the submission, for instance, when what it was written to is no longer what it says.' : 'Estimated from the target mark above; change any category the script should be judged differently on.'} Changes never rewrite a stored grading — re-run the sample to judge it against them.</p>
+    ${!gen ? `<div style="display:flex"><tv-button variant="secondary" size="sm" icon="sparkles" ${s.targetScore == null ? 'disabled' : ''} data-act="reestimate">Re-estimate from target mark</tv-button></div>` : ''}
+    ${s.outOfDateReasons.includes('targetsEdited') ? `<p class="ck-caption" style="display:flex;gap:8px;color:var(--warn-600)">${icon('clock')}<span>Targets changed since the last grading. The results still show the targets they were judged against; re-run the sample to judge it against these.</span></p>` : ''}
+    ${rows.length === 0 ? `<div class="ck-empty"><span class="ck-empty__ic">${icon('circle')}</span><span class="ck-empty__body">This rubric has no gradable categories to set targets on.</span></div>` : `<ul class="tlist">${rows.map(({ cat, intent }) => {
+      const chosen = new Set(intent?.intendedStatementIds ?? [])
+      const body = isPoints
+        ? `<ul style="margin-top:8px;list-style:none;padding:0;display:flex;flex-direction:column;gap:4px">${(cat.statements ?? []).map(st => `<li class="ck-caption" style="display:flex;gap:8px;align-items:flex-start;color:var(--fg-2)"><button type="button" class="checkbox" data-act="toggleStatement" data-sample="${s.id}" data-cat="${cat.id}" data-st="${st.id}" aria-pressed="${chosen.has(st.id)}" aria-label="${esc(st.statement)}">${icon('check')}</button><span class="ck-grow" style="overflow-wrap:anywhere">${esc(st.statement)}</span><span class="ck-tnum ck-muted">${formatScore(st.points)}</span></li>`).join('')}</ul>
+           <p class="ck-caption" style="margin-top:8px">${formatScore((cat.statements ?? []).filter(st => chosen.has(st.id)).reduce((a, st) => a + st.points, 0))} of ${formatScore((cat.statements ?? []).reduce((a, st) => a + st.points, 0))} marks expected</p>`
+        : `<div style="margin-top:8px;max-width:448px"><select class="ck-input ck-input--sm ck-select" aria-label="Target level for ${esc(cat.title)}" data-act="setLevel" data-sample="${s.id}" data-cat="${cat.id}"><option value="" ${intent?.intendedLevel == null ? 'selected' : ''}>Set a level</option>${(cat.levels ?? []).map(l => `<option value="${l.level}" ${intent?.intendedLevel === l.level ? 'selected' : ''}>Level ${l.level} · ${esc(l.title)}</option>`).join('')}</select></div>`
+      return `<li><div class="ttl"><p>${esc(cat.title)}</p><span class="ck-tip ck-tip--right" data-tip="${esc(srcTip(intent?.source))}" tabindex="0">${tag({ tone: srcTone(intent?.source), label: srcLabel(intent?.source) })}</span></div>${body}</li>`
+    }).join('')}</ul>`}</div>`
+}
+
+/* ---- Rationale ---- */
+function rationaleModal(m, c) {
+  const s = c.overview.samples.find(x => x.id === m.sampleId); const a = aggregateSample(s, c.results.passes)
+  const rollup = buildSampleBreakdown(a, c.overview.intents, c.rubric).find(r => r.categoryId === m.categoryId)
+  const run = categoryRunsFor(a, m.categoryId).find(r => r.pass.id === m.passId); if (!run || !rollup) return { body: '' }
+  const about = indexRubric(c.rubric).get(m.categoryId)?.about ?? null
+  const passed = rollup.repeats.find(r => r.passId === run.pass.id)?.pass ?? false
+  const g = run.grade; const desc = g.level != null ? about?.levels.find(l => l.level === g.level)?.description : null
+  const target = rollup.intendedLevel != null ? `Target L${rollup.intendedLevel}` : rollup.intendedScore != null ? `Target ${formatScore(rollup.intendedScore)}` : null
+  const sect = (h, txt, cls = '') => txt ? `<section class="sect"><h4>${esc(h)}</h4><p class="box ${cls}">${esc(txt)}</p></section>` : ''
+  const body = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      ${tag({ tone: passed ? 'success' : 'error', variant: 'dot', label: passed ? 'On target' : 'Off target' })}
+      ${g.level != null ? `<span class="ck-tip" ${desc ? `data-tip="${esc(desc)}" tabindex="0"` : ''}>${tag({ tone: 'neutral', label: `Level ${g.level}${g.levelTitle ? ` · ${g.levelTitle}` : ''}` })}</span>` : ''}
+      ${target ? tag({ tone: 'neutral', label: target }) : ''}
+      ${g.gradingConfidenceRating != null ? tag({ tone: 'neutral', label: `${g.gradingConfidenceRating}% confident` }) : ''}</div>
+    ${sect('What it measures', about?.description)}
+    ${rollup.intentRationale ? `<section class="sect"><h4>${esc(describeIntentSource(rollup.intentSource))}</h4><p class="box dashed">${esc(rollup.intentRationale)}</p></section>` : ''}
+    <section class="sect"><h4>Marking rationale</h4>${g.rationale ? `<p class="box ink">${esc(g.rationale)}</p>` : '<p class="ck-muted">The grader gave no rationale for this repeat.</p>'}</section>
+    ${sect('Grading instructions', about?.instructions)}`
+  return { size: 'lg', icon: 'quote', heading: rollup.title, subtitle: `Repeat ${run.pass.repeatIndex + 1}`, 'cancel-label': 'Close', body }
+}
+
+/* ---- Delete confirmations ----
+   The confirm action IS the destructive one, so the primary keeps its
+   right-hand position and renders red (primary-variant="danger"). */
+function deleteSampleModal(m, c) {
+  const s = c.overview.samples.find(x => x.id === m.sampleId)
+  return { size: 'sm', icon: 'trash-2', heading: 'Delete this sample?', subtitle: s?.label || 'Untitled sample',
+    'primary-label': 'Delete sample', 'primary-variant': 'danger', 'cancel-label': 'Keep sample',
+    body: `<p style="margin:0;color:var(--fg-2)">The sample and every grading of it are removed. This cannot be undone.</p>` }
+}
+function deleteAllModal(m, c) {
+  const n = c.overview.sampleCount
+  return { size: 'sm', icon: 'trash-2', heading: 'Delete all samples?', subtitle: 'This cannot be undone',
+    'primary-label': 'Delete everything', 'primary-variant': 'danger', 'cancel-label': 'Keep samples',
+    body: `<p style="margin:0;color:var(--fg-2)">${n} sample${n === 1 ? '' : 's'} and their files will be deleted, along with every run and its results and the tolerance settings for this test. Candidate submissions are not affected.</p>${c.activeRun ? `<p style="margin:8px 0 0;color:var(--fg-2)">The run in progress will be cancelled.</p>` : ''}` }
+}
+
+
+/* ==========================================================================
+ * ACTIONS — every click routes through here. Mutations are simulated on the
+ * in-memory scenario so the design team can see the resulting state.
+ * ========================================================================== */
+function openSample(id, tab = 'sample') {
+  const c = ctx(); const s = c.overview.samples.find(x => x.id === id); const md = s.hasMarkdown ? markdownFor(s, c) : ''
+  state.modal = { type: 'sample', sampleId: id, tab, draft: md, server: md, hasLocalDraft: !!s.hasDraft, staleDraft: false, prompt: null }
+}
+function startRun(label) { const c = ctx(); toast(label, `×${state.repeatCount} repeat${state.repeatCount > 1 ? 's' : ''} each. Results update live.`); const s = state.data.overview; s.latestRun = run('run-x', { status: 'processing', repeatCount: state.repeatCount, totalPasses: c.overview.pendingCount * state.repeatCount || 3, completedPasses: 0, completedAt: null }); s.samples.forEach(x => { if (x.needsGrading) { x.isOutOfDate = false; x.outOfDateReasons = []; x.needsGrading = false } }); s.isOutOfDate = false; s.outOfDateReasons = []; s.pendingCount = 0 }
+
+const actions = {
+  menu() { state.menuOpen = !state.menuOpen },
+  openSettings() { const s = ctx().overview.settings; state.modal = { type: 'settings', tolerance: s.tolerancePercentage, repeat: s.defaultRepeatCount } },
+  openUpload() { state.modal = { type: 'upload', staged: [] } },
+  openGenerate() { state.modal = { type: 'generate', count: Math.min(3, Math.max(1, ctx().remaining)), bands: ['low', 'low-mid', 'mid'].slice(0, Math.min(3, Math.max(1, ctx().remaining))), windows: {} } },
+  openDeleteAll() { state.modal = { type: 'deleteAll' } },
+  openDeleteSample(el) { state.modal = { type: 'deleteSample', sampleId: el.dataset.id } },
+  openSample(el) { openSample(el.dataset.id, 'sample') },
+  openTargets(el) { openSample(el.dataset.id, 'targets') },
+  openRationale(el) { state.modal = { type: 'rationale', sampleId: el.dataset.sample, categoryId: el.dataset.cat, passId: el.dataset.pass } },
+  view(el) { state.view = el.dataset.view },
+  repeat(el) { state.repeatCount = Number(el.value) },
+  run() { const n = ctx().overview.pendingCount || ctx().overview.samples.filter(s => s.hasMarkdown).length; startRun(`Grading ${n} sample${n === 1 ? '' : 's'}`) },
+  rerunAll() { state.menuOpen = false; startRun('Grading every sample') },
+  rerun(el) { const s = ctx().overview.samples.find(x => x.id === el.dataset.id); toast('Grading 1 sample', `×${state.repeatCount} repeats. Other results stay.`); s.isOutOfDate = false; s.outOfDateReasons = []; s.needsGrading = false; state.data.overview.pendingCount = state.data.overview.samples.filter(x => x.needsGrading).length; state.data.overview.isOutOfDate = state.data.overview.samples.some(x => x.isOutOfDate) },
+  toggleSample(el) { const id = el.dataset.id; state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id) },
+  toggleRuns(el) { const k = el.dataset.key; state.openRuns.has(k) ? state.openRuns.delete(k) : state.openRuns.add(k) },
+  toggleCat(el) { const id = el.dataset.id; state.openCats.has(id) ? state.openCats.delete(id) : state.openCats.add(id) },
+  toggleCatSample(el) { const k = el.dataset.key; state.openCatSamples.has(k) ? state.openCatSamples.delete(k) : state.openCatSamples.add(k) },
+  // The POC rendered these two as live inputs with nothing behind them, so
+  // anything typed was silently discarded. They now write to the sample.
+  renameSample(el) { const s = state.data.overview.samples.find(x => x.id === el.dataset.id); if (s) s.label = el.value.trim() || null },
+  setTargetScore(el) { const s = state.data.overview.samples.find(x => x.id === el.dataset.id); if (!s) return; const v = el.value.trim(); s.targetScore = v === '' ? null : Number(v); markTargetsEdited(s.id) },
+  /* generate */
+  genCount(el) { const n = Number(el.value); state.modal.count = n; state.modal.bands = bandScale().slice(0, n).map(b => b.value) },
+  genBand(el) { const b = el.dataset.band; const m = state.modal; m.bands = m.bands.includes(b) ? m.bands.filter(x => x !== b) : [...m.bands, b] },
+  genReset() { state.modal.windows = {} },
+  genConfirm() { const m = state.modal; const ov = state.data.overview; const scale = bandScale(); const chosen = scale.filter(b => m.bands.includes(b.value))
+    for (let i = 0; i < m.count && ov.samples.length < ov.maxSamples; i++) { const band = chosen[i % chosen.length]; ov.samples.push(sample(`new-${Date.now()}-${i}`, { label: `${band.name} sample`, band: band.value, conversionStatus: 'in-progress', hasMarkdown: false, displayIndex: ov.samples.length })) }
+    ov.sampleCount = ov.samples.length; ov.latestGeneration = run('gen-new', { kind: 'generation', status: 'processing', totalPasses: m.count, completedPasses: 0, repeatCount: 1, completedAt: null }); state.modal = null; toast('Writing sample scripts', `${m.count} sample${m.count === 1 ? '' : 's'} across ${chosen.length} band${chosen.length === 1 ? '' : 's'}.`) },
+  /* upload */
+  uploadAdd() { const m = state.modal; const names = ['naledi-p-design.pdf', 'sipho-d-schema.docx', 'ayesha-k-submission.md']; if (m.staged.length >= 3) return; m.staged.push({ name: names[m.staged.length], target: null }) },
+  uploadTarget(el) { state.modal.staged[Number(el.dataset.index)].target = el.value === '' ? null : Number(el.value) },
+  uploadRemove(el) { state.modal.staged.splice(Number(el.dataset.index), 1) },
+  uploadConfirm() { const m = state.modal; const ov = state.data.overview; m.staged.forEach((e, i) => { ov.samples.push(sample(`up-${Date.now()}-${i}`, { source: 'uploaded', label: e.name.replace(/\.[^.]+$/, ''), originalFileName: e.name, targetScore: e.target, conversionStatus: e.name.endsWith('.md') ? 'complete' : 'queued', hasMarkdown: e.name.endsWith('.md'), generatedByRunId: null, needsGrading: e.name.endsWith('.md'), displayIndex: ov.samples.length })) }); ov.sampleCount = ov.samples.length; ov.pendingCount = ov.samples.filter(x => x.needsGrading).length; state.modal = null; toast('Uploading', `${m.staged.length} file${m.staged.length === 1 ? '' : 's'} queued for conversion.`) },
+  /* settings */
+  setTolerance(el) { state.modal.tolerance = el.value === '' ? null : Number(el.value) },
+  setRepeat(el) { state.modal.repeat = Number(el.value) },
+  useFloor(el) { state.modal.tolerance = Number(el.dataset.floor) },
+  saveSettings() { const m = state.modal; Object.assign(state.data.overview.settings, { tolerancePercentage: m.tolerance, defaultRepeatCount: m.repeat }); state.repeatCount = m.repeat; state.modal = null },
+  /* sample modal */
+  sampleTab(el) { state.modal.tab = el.dataset.tab },
+  draft(el) { state.modal.draft = el.value; renderModal(false) },
+  saveLocal() { const m = state.modal; m.hasLocalDraft = true; toast('Draft saved', 'Kept in this browser. It uploads when you close this window.', 'pass'); const s = state.data.overview.samples.find(x => x.id === m.sampleId); s.hasDraft = true; m.server = m.draft },
+  saveGrade() { state.modal.prompt = 'grade' },
+  saveGradeConfirm() { const m = state.modal; const s = state.data.overview.samples.find(x => x.id === m.sampleId); s.hasDraft = false; state.modal = null; toast('Grading 1 sample', `×${state.repeatCount} repeats. Its current grading is replaced by the new run.`) },
+  promptCancel() { state.modal.prompt = null },
+  sampleClose() { const m = state.modal; if (m.draft !== m.server) { m.prompt = 'close' } else { state.modal = null } },
+  saveAndClose() { const m = state.modal; const s = state.data.overview.samples.find(x => x.id === m.sampleId); if (s.latestRunId) { s.isOutOfDate = true; if (!s.outOfDateReasons.includes('sampleEdited')) s.outOfDateReasons = [...s.outOfDateReasons, 'sampleEdited']; s.needsGrading = true; state.data.overview.pendingCount = state.data.overview.samples.filter(x => x.needsGrading).length; state.data.overview.isOutOfDate = true; if (!state.data.overview.outOfDateReasons.includes('sampleEdited')) state.data.overview.outOfDateReasons = [...state.data.overview.outOfDateReasons, 'sampleEdited'] } s.hasDraft = false; state.modal = null; toast('Sample saved', s.latestRunId ? 'Its grading is now out of date until you re-run it.' : 'The next grading reads this version.', 'pass') },
+  discardAndClose() { const s = state.data.overview.samples.find(x => x.id === state.modal.sampleId); s.hasDraft = false; state.modal = null },
+  discardDraft() { const m = state.modal; m.draft = m.server; m.hasLocalDraft = false; m.staleDraft = false; m.prompt = null; const s = state.data.overview.samples.find(x => x.id === m.sampleId); s.hasDraft = false },
+  setLevel(el) { const lvl = el.value === '' ? null : Number(el.value); if (lvl == null) return; const ints = state.data.overview.intents; let i = ints.find(x => x.testSampleScriptId === el.dataset.sample && x.testGradingCategoryId === el.dataset.cat); const cat = flattenRubricCategories(rubricFor()).find(x => x.id === el.dataset.cat); const l = cat.levels.find(x => x.level === lvl)
+    if (!i) { i = { id: `int-${Date.now()}`, testSampleScriptId: el.dataset.sample, testGradingCategoryId: cat.id, categoryTitle: cat.title, intendedStatementIds: null, maxPoints: cat.maxAvailablePoints ?? null }; ints.push(i) }
+    Object.assign(i, { intendedLevel: lvl, intendedLevelTitle: l.title, intendedScore: l.requiredPoints, source: 'authored', rationale: 'Set by the author.' }); markTargetsEdited(el.dataset.sample) },
+  toggleStatement(el) { const ints = state.data.overview.intents; const i = ints.find(x => x.testSampleScriptId === el.dataset.sample && x.testGradingCategoryId === el.dataset.cat); if (!i) return; const set = new Set(i.intendedStatementIds ?? []); set.has(el.dataset.st) ? set.delete(el.dataset.st) : set.add(el.dataset.st); i.intendedStatementIds = [...set]; const cat = flattenRubricCategories(rubricFor()).find(x => x.id === el.dataset.cat); i.intendedScore = cat.statements.filter(s => set.has(s.id)).reduce((a, s) => a + s.points, 0); i.source = 'authored'; markTargetsEdited(el.dataset.sample) },
+  reestimate() { const id = state.modal.sampleId; const s = state.data.overview.samples.find(x => x.id === id); const ints = state.data.overview.intents; const share = s.targetScore / (state.data.overview.test.maxAvailablePoints || 1); const lvl = Math.min(4, Math.max(1, Math.round(share * 4)))
+    state.data.overview.intents = ints.filter(x => x.testSampleScriptId !== id).concat(levelIntents(id, [lvl, lvl, Math.max(1, lvl - 1), lvl, lvl], 'estimated')); markTargetsEdited(id); toast('Targets re-estimated', 'Every category is set from the target mark again.') },
+  confirmDeleteSample() { const ov = state.data.overview; ov.samples = ov.samples.filter(x => x.id !== state.modal.sampleId); ov.sampleCount = ov.samples.length; ov.pendingCount = ov.samples.filter(x => x.needsGrading).length; ov.isOutOfDate = ov.samples.some(x => x.isOutOfDate); if (!ov.samples.length) ov.latestRun = null; state.modal = null },
+  confirmDeleteAll() { const ov = state.data.overview; const n = ov.sampleCount; ov.samples = []; ov.sampleCount = 0; ov.pendingCount = 0; ov.latestRun = null; ov.latestGeneration = null; ov.isOutOfDate = false; ov.outOfDateReasons = []; ov.settings = { ...SETTINGS }; state.data.results = { passes: [], runs: [], intents: [] }; state.modal = null; toast('Samples deleted', `${n} sample${n === 1 ? '' : 's'} and every run removed.`) },
+}
+function markTargetsEdited(sampleId) { const s = state.data.overview.samples.find(x => x.id === sampleId); if (!s) return; if (s.latestRunId) { s.isOutOfDate = true; if (!s.outOfDateReasons.includes('targetsEdited')) s.outOfDateReasons = [...s.outOfDateReasons, 'targetsEdited']; s.needsGrading = true; const ov = state.data.overview; ov.pendingCount = ov.samples.filter(x => x.needsGrading).length; ov.isOutOfDate = true; if (!ov.outOfDateReasons.includes('targetsEdited')) ov.outOfDateReasons = [...ov.outOfDateReasons, 'targetsEdited'] } s.targetsUpdatedAt = new Date().toISOString() }
+
+/* ---- the card's own footer buttons route back into `actions` by modal type ---- */
+const CONFIRM = {
+  generate: 'genConfirm', upload: 'uploadConfirm', settings: 'saveSettings',
+  deleteSample: 'confirmDeleteSample', deleteAll: 'confirmDeleteAll',
+}
+modalCard.addEventListener('tv-confirm', () => {
+  const m = state.modal; if (!m) return
+  if (m.type === 'sample') {
+    if (m.prompt === 'close') actions.saveAndClose()
+    else if (m.prompt === 'grade') actions.saveGradeConfirm()
+    else actions.saveGrade()
+  } else if (CONFIRM[m.type]) actions[CONFIRM[m.type]]()
+  else state.modal = null
+  render()
+})
+modalCard.addEventListener('tv-cancel', () => {
+  const m = state.modal; if (!m) return
+  if (m.type === 'sample' && m.prompt) { actions.promptCancel(); render(); return }
+  if (m.type === 'sample') { actions.sampleClose(); render(); return }
+  state.modal = null; render()
+})
+modalCard.addEventListener('tv-danger', () => {
+  const m = state.modal; if (!m) return
+  if (m.type === 'sample' && m.prompt === 'close') { actions.discardAndClose(); render() }
+})
+// ✕ / Esc / scrim: the card closes itself, so the page state follows it.
+modalCard.addEventListener('tv-close', () => {
+  if (!state.modal) return
+  if (state.modal.type === 'sample' && !state.modal.prompt && state.modal.draft !== state.modal.server) {
+    actions.sampleClose(); render(); return          // reopens on the prompt step
+  }
+  state.modal = null; render()
+})
+
+/* ---- delegated events ---- */
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-act]')
+  if (!el) { if (state.menuOpen) { state.menuOpen = false; render() } return }
+  if (el.matches('select,input,textarea')) return
+  if (el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true') return
+  const fn = actions[el.dataset.act]; if (!fn) return
+  fn(el, ev); render()
+})
+document.addEventListener('change', ev => { const el = ev.target.closest('[data-act]'); if (!el || !el.matches('select,input')) return; const fn = actions[el.dataset.act]; if (fn) { fn(el, ev); render() } })
+document.addEventListener('input', ev => {
+  const el = ev.target
+  if (el.matches('textarea[data-act="draft"]')) { actions.draft(el); return }
+  // the tolerance warning updates in place so the number input keeps focus
+  if (el.matches('input[data-act="setTolerance"]')) {
+    actions.setTolerance(el)
+    const warn = toleranceWarning(state.modal, ctx())
+    const host = document.getElementById('tolWarn')
+    if (host) host.innerHTML = warn ? toleranceWarnHtml(warn) : ''
+    const m = state.modal
+    modalCard.confirmDisabled = !(m.tolerance != null && Number.isInteger(m.tolerance) && m.tolerance >= 0 && m.tolerance <= 100)
+  }
+})
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return
+  const el = ev.target.closest('[data-act="uploadAdd"]')
+  if (el) { ev.preventDefault(); actions.uploadAdd(el, ev); render() }
+})
+
+/* range slider: pointer drag + arrow keys. The POC announced these handles as
+   sliders but bound pointer events only, so they were unusable by keyboard. */
+function setWindow(key, lo, hi) {
+  state.modal.windows[key] = [lo, hi]
+  const slider = document.querySelector(`[data-slider="${key}"]`)
+  if (!slider) return
+  slider.dataset.lo = lo; slider.dataset.hi = hi
+  const focused = document.activeElement?.dataset?.handle
+  slider.outerHTML = renderSlider([lo, hi], key)
+  const fresh = document.querySelector(`[data-slider="${key}"]`)
+  const cell = fresh.closest('tr').lastElementChild
+  cell.textContent = formatPercentageWindow([lo, hi])
+  cell.style.color = 'var(--fg-1)'; cell.style.fontWeight = '600'
+  if (focused) fresh.querySelector(`[data-handle="${focused}"]`)?.focus()
+}
+document.addEventListener('pointerdown', ev => {
+  const h = ev.target.closest('.h'); if (!h) return
+  const slider = h.closest('.slider'); const track = slider.querySelector('.tr'); const key = slider.dataset.slider; const which = h.dataset.handle
+  const move = e => { const r = track.getBoundingClientRect(); let v = Math.round((e.clientX - r.left) / r.width * 100); v = Math.max(0, Math.min(100, v))
+    let lo = Number(slider.dataset.lo), hi = Number(slider.dataset.hi)
+    if (which === 'lo') lo = Math.min(v, hi - 5); else hi = Math.max(v, lo + 5)
+    setWindow(key, lo, hi) }
+  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); render() }
+  document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); ev.preventDefault()
+})
+document.addEventListener('keydown', ev => {
+  const h = ev.target.closest?.('.h'); if (!h) return
+  const delta = ev.key === 'ArrowLeft' || ev.key === 'ArrowDown' ? -1 : ev.key === 'ArrowRight' || ev.key === 'ArrowUp' ? 1 : 0
+  if (!delta) return
+  ev.preventDefault()
+  const slider = h.closest('.slider'); const key = slider.dataset.slider; const step = ev.shiftKey ? 10 : 1
+  let lo = Number(slider.dataset.lo), hi = Number(slider.dataset.hi)
+  if (h.dataset.handle === 'lo') lo = Math.max(0, Math.min(lo + delta * step, hi - 5))
+  else hi = Math.min(100, Math.max(hi + delta * step, lo + 5))
+  setWindow(key, lo, hi)
+})
+
+/* ==========================================================================
+ * MOCKUP CONTROLS + INDEX
+ * ========================================================================== */
+function buildScenarioSelect() {
+  const sel = document.getElementById('scenario'); sel.innerHTML = Object.entries(SCENARIOS).filter(([, s]) => s.rubric === state.rubric).map(([k, s]) => `<option value="${k}" ${k === state.scenarioKey ? 'selected' : ''}>${s.label}</option>`).join('')
+}
+const MODAL_SHORTCUTS = [
+  ['Generate', () => { state.modal = { type: 'generate', count: 3, bands: ['low', 'low-mid', 'mid'], windows: {}, remaining: Math.max(3, ctx().remaining) } }],
+  ['Upload', () => { state.modal = { type: 'upload', staged: [{ name: 'naledi-p-design.pdf', target: 38 }, { name: 'sipho-d-schema.docx', target: null }], remaining: Math.max(3, ctx().remaining) } }],
+  ['Tolerance & defaults', () => actions.openSettings()],
+  ['Settings (floor warning)', () => { actions.openSettings(); state.modal.tolerance = 3 }],
+  ['Sample · editor', () => openSample(firstGraded(), 'sample')],
+  ['Sample · unsaved changes', () => { openSample(firstGraded(), 'sample'); state.modal.draft += '\n\nAn extra paragraph the author is still writing.' }],
+  ['Sample · stale draft', () => { openSample(firstGraded(), 'sample'); state.modal.staleDraft = true; state.modal.hasLocalDraft = true }],
+  ['Save your changes? prompt', () => { openSample(firstGraded(), 'sample'); state.modal.draft += ' (edited)'; state.modal.prompt = 'close' }],
+  ['Save & grade prompt', () => { openSample(firstGraded(), 'sample'); state.modal.prompt = 'grade' }],
+  ['Targets · generated', () => openSample(firstGraded(), 'targets')],
+  ['Targets · uploaded', () => openSample(state.data.overview.samples.find(s => s.source === 'uploaded' && s.targetScore != null)?.id ?? firstGraded(), 'targets')],
+  ['Rationale', () => { const c = ctx(); const s = c.overview.samples.find(x => x.id === firstGraded()); const a = aggregateSample(s, c.results.passes); const cat = buildSampleBreakdown(a, c.overview.intents, c.rubric)[0]; const r = categoryRunsFor(a, cat.categoryId)[0]; state.modal = { type: 'rationale', sampleId: s.id, categoryId: cat.categoryId, passId: r.pass.id } }],
+  ['Delete sample', () => { state.modal = { type: 'deleteSample', sampleId: firstGraded() } }],
+  ['Delete all', () => actions.openDeleteAll()],
+]
+function firstGraded() { const c = ctx(); return (c.overview.samples.find(s => s.latestRunId && c.results.passes.some(p => p.testSampleScriptId === s.id && p.status === 'complete')) ?? c.overview.samples.find(s => s.hasMarkdown) ?? c.overview.samples[0])?.id }
+function buildModalButtons() { document.getElementById('modalButtons').innerHTML = MODAL_SHORTCUTS.map(([l], i) => `<button class="mbtn" data-mock="modal" data-index="${i}">${l}</button>`).join('') }
+document.getElementById('scenario').addEventListener('change', e => { state.scenarioKey = e.target.value; loadScenario(); render() })
+document.getElementById('rubricSel').addEventListener('change', e => { state.rubric = e.target.value; state.scenarioKey = state.rubric === 'points' ? 'pointsResults' : 'results'; buildScenarioSelect(); loadScenario(); render() })
+document.getElementById('cal-mockbar').addEventListener('click', e => {
+  const b = e.target.closest('[data-mock]'); if (!b) return
+  if (b.dataset.mock === 'modal') { if (ctx().overview.samples.length === 0 && !['Generate', 'Upload', 'Tolerance & defaults', 'Settings (floor warning)', 'Delete all'].includes(MODAL_SHORTCUTS[b.dataset.index][0])) { state.scenarioKey = state.rubric === 'points' ? 'pointsResults' : 'results'; buildScenarioSelect(); loadScenario() } MODAL_SHORTCUTS[b.dataset.index][1](); render() }
+  if (b.dataset.mock === 'expandAll') { const c = ctx(); c.overview.samples.forEach(s => state.expanded.add(s.id)); flattenRubricCategories(c.rubric).forEach(cat => { state.openCats.add(cat.id); c.overview.samples.forEach(s => { state.openRuns.add(`${s.id}:${cat.id}`); state.openCatSamples.add(`${cat.id}:${s.id}`) }) }); render() }
+  if (b.dataset.mock === 'toast') { toast('Grading 4 samples', '×3 repeats each. Results update live.'); setTimeout(() => toast('Could not start the run', 'A run is already in progress for this test.', 'issue'), 600) }
+})
+
+const INDEX = [
+  ['Views', ''],
+  ['Starting view', 'Scenario 1. One panel, two ways in (Generate / Upload), intro copy with the tolerance link, footer note. No toolbar yet.', 'empty'],
+  ['Generation in progress', 'Scenario 2. Progress card "Writing sample scripts…", rows in the Generating state, Run disabled.', 'generating'],
+  ['Samples ready, nothing graded', 'Scenario 3. Toolbar with Upload / Generate / repeats / "Run N pending"; Ready, Converting and Needs-a-target tags; "No run yet" footer. Category view shows the rubric spine with "Not graded yet".', 'ready'],
+  ['Grading in progress', 'Scenario 4. Progress card "Grading samples… 5 of 12", Grading tags, partial verdict bars, Run reads "Running…".', 'grading'],
+  ['Results — Sample view', 'Scenario 5. Verdict tags (In range / Graded low / Unstable / No target / Not graded), per-repeat bars, "N of M categories off target", Out of date tag on one sample, Levels / Submission buttons, re-run + delete actions. Expand a row for the per-category breakdown (level code, achieved per run, target with ⓘ, score with per-run chips, statement rows on points rubrics, stale notice, diagnosis note). Expand a category for its run list.', 'results'],
+  ['Results — Category view', 'Scenario 5, Category view. Behaviour tag per category (In range / Graded low / high / Off target / Unstable), one bar per sample, levels-awarded code, mean score; open a category for its samples, open a sample for its runs.', 'results'],
+  ['Out of date (rubric edited)', 'Scenario 6. Notification note listing the detected reasons, dimmed Graded tags and results, Out of date tag on every graded row, "Run 4 pending".', 'stale'],
+  ['Failure states', 'Scenario 7. Generation failed, Conversion failed, Grading failed (Failed verdict, error in breakdown), a Draft tag, run summary with failed passes.', 'failures'],
+  ['Points-based rubric', 'Switch Rubric to points-based. Awarded column (mean + "N of M statements"), one line per grading statement with met / contested / not met, marks instead of levels everywhere, statement checklists on the Targets tab.', 'pointsResults'],
+  ['Modals', ''],
+  ['Generate sample scripts', 'Count, five mark-band chips in scale order, and the sample plan with a two-handle range slider per slot (drag a handle or use the arrow keys; Reset ranges appears).'],
+  ['Upload sample scripts', 'Dropzone (click to stage a mock file), per-file target mark (required), Upload N.'],
+  ['Tolerance & defaults', 'Tolerance % and default repeats; warn note with "Use N%" when the tolerance is narrower than one level step.'],
+  ['Sample modal — Sample tab', 'Markdown editor as graded; Save (local draft) and Save & grade; Discard changes; "Unsaved changes" / "Draft saved" footer hint; stale-draft warning variant.'],
+  ['Sample modal — Targets tab', 'Target mark, per-category level dropdown (or statement checklist), set-by tags (Generated / Estimated / You), Re-estimate for uploaded samples, stale note after an edit.'],
+  ['Save your changes? / Save and grade?', 'The two prompts, each replacing the sample card\'s body rather than stacking a second card on top of it.'],
+  ['Rationale', 'One repeat\'s full account: on/off target, level, target and confidence tags, What it measures, the target\'s origin (Marking expectation / Estimated target / Target set by you), Marking rationale, Grading instructions.'],
+  ['Delete sample / Delete all', 'Destructive confirmations — the primary keeps its right-hand position and renders red. Delete all mentions a cancelled run when one is in flight.'],
+  ['Other', ''],
+  ['Overflow menu', 'The vertical-ellipsis trigger, top right: Tolerance & defaults, Re-run all samples, Delete all samples.'],
+  ['Toasts', 'Bottom-right notifications for run start, saves, and errors ("Show a toast" in the bar).'],
+  ['Tooltips', 'Hover or focus any tag, bar, ⓘ, button or level name.'],
+]
+function buildIndex() {
+  document.getElementById('cal-index').innerHTML = `<h2>Index of views and modals in this mockup</h2><table><thead><tr><th style="width:240px">Item</th><th>What it shows / how to reach it</th></tr></thead><tbody>${INDEX.map(([a, b, sc]) => b === '' ? `<tr><td colspan="2" style="background:var(--bg-subtle);font-weight:600;color:var(--fg-2)">${a}</td></tr>` : `<tr><td>${sc ? `<a href="#" data-goto="${sc}">${a}</a>` : a}</td><td>${b}</td></tr>`).join('')}</tbody></table>
+  <p class="ck-caption" style="margin-top:12px">Icons are Lucide, this repo's FontAwesome Pro substitute. Every colour is a token from design-system/colors_and_type.css. All sample text, rubric wording, marks, rationales and file names are invented.</p>`
+  document.getElementById('cal-index').addEventListener('click', e => { const a = e.target.closest('[data-goto]'); if (!a) return; e.preventDefault(); const sc = a.dataset.goto; state.rubric = SCENARIOS[sc].rubric; document.getElementById('rubricSel').value = state.rubric; state.scenarioKey = sc; buildScenarioSelect(); loadScenario(); state.view = a.textContent.includes('Category view') ? 'categories' : 'samples'; render(); window.scrollTo({ top: 0, behavior: 'smooth' }) })
+}
+
+/* ---- boot ---- */
+buildScenarioSelect(); buildModalButtons(); buildIndex(); loadScenario(); state.expanded.add('s3'); render()
+
+FEATURES.calibration = { render }
+
+})()
+</script>
+
+<script>
+/* ==========================================================================
+ * TAB 2 — CHECKS  (rubric checks)
+ * ========================================================================== */
+;(() => {
+/* ==========================================================================
+ * The severity vocabulary. TONE maps an outcome onto the shared tone table in
+ * checks.css; KIND maps it onto a <tv-status-tag> kind. Both live in one
+ * place so the panel and the grading tab can never drift apart.
+ *
+ * Every outcome has its own ICON as well as its own tone — the POC gave
+ * "improvement" and "could not run" the same "!" and let colour carry the
+ * difference, which colour alone cannot do.
+ * ========================================================================== */
+const TONE = { issue: 'issue', improvement: 'warn', pass: 'pass', skipped: 'none', error: 'issue', settled: 'none' };
+const ICON = { issue: 'icon-x', improvement: 'icon-triangle-alert', pass: 'icon-check', skipped: 'icon-minus', error: 'icon-ban', settled: 'icon-check' };
+const KIND = { issue: 'issue', improvement: 'improvement', pass: 'passed', skipped: 'skipped', error: 'failed', settled: 'passed' };
+
+const mark = (st, sm) =>
+  `<span class="ck-mark ${sm ? 'ck-mark--sm' : ''}" data-tone="${TONE[st] || 'none'}" aria-hidden="true"><i class="${ICON[st] || 'icon-minus'}"></i></span>`;
+
+// ---- state: findings are the only thing that moves.
+const findings = new Map();
+for (const ev of DATA.evaluations) for (const f of ev.findings) {
+  // `originalValue` is the wording the check raised the finding against, kept
+  // because approving overwrites `currentValue`. `appliedValue` is what an
+  // approval wrote: the api records it per finding, and a decision taken
+  // before it did (anything already settled in this snapshot) has none, which
+  // is exactly what the panel says in that case.
+  findings.set(f.id, { ...f, evaluation: ev, originalValue: f.currentValue, appliedValue: null });
+}
+const pristine = new Map([...findings].map(([id, f]) => [id, { ...f }]));
+const pristineLastChecked = DATA.lastCheckedAt;   // restored by the mock bar's reset
+const fixing = new Set();          // group keys with a batch in flight
+let queue = [], queueIndex = 0, queueGroup = null, edited = new Map();
+
+// What each evaluation had open when the page loaded. A check whose findings
+// were already settled before the snapshot keeps the verdict the panel showed
+// (the re-run that would clear it has not happened); one settled HERE turns
+// green, which is what makes Fix all visible.
+const openAtLoad = new Map(DATA.evaluations.map(ev =>
+  [ev.id, ev.findings.filter(f => f.state === 'open').length]));
+
+const isOpen = (f) => f.state === 'open';
+const isFixable = (f) => Boolean(f.autoFixKey) ||
+  (f.suggestedValue && f.suggestedValue.trim() !== (f.currentValue ?? '').trim());
+const groupFindings = (key, only) => [...findings.values()]
+  .filter(f => f.evaluation.groupKey === key && (!only || only(f)));
+const evalOpen = (ev) => ev.findings.filter(f => isOpen(findings.get(f.id))).length;
+
+// A group's counts move as findings settle: an evaluation with nothing left
+// open reads `settled`, which is where a check sits between a fix and the
+// re-run that confirms it.
+function evalStatus(ev) {
+  if (ev.status === 'error') return 'error';
+  if (ev.outcome === 'issue' || ev.outcome === 'improvement') {
+    if (evalOpen(ev) > 0) return ev.outcome;
+    return openAtLoad.get(ev.id) > 0 ? 'settled' : ev.outcome;
+  }
+  return ev.outcome;
+}
+function counts(key) {
+  const c = { issue:0, improvement:0, pass:0, skipped:0, inProgress:0, error:0, awaiting:0 };
+  for (const ev of DATA.evaluations) {
+    if (ev.groupKey !== key) continue;
+    const s = evalStatus(ev);
+    if (s === 'error') c.error++;
+    // Settled: the verdict stands until a re-run, but nothing is open on it,
+    // so it leaves that verdict's colour for the bar's awaiting segment.
+    else if (s === 'settled') c.awaiting++;
+    else if (s === 'issue') c.issue++;
+    else if (s === 'improvement') c.improvement++;
+    else if (s === 'pass') c.pass++;
+    else c.skipped++;
+  }
+  return c;
+}
+
+/**
+ * Every decision taken in this tile, newest first.
+ *
+ * Two sources, because a re-run replaces the findings decisions were taken on:
+ * the history the api keeps (`DECISIONS`, which reads the replaced rows), and
+ * anything settled on this page since it loaded.
+ *
+ * The api's list is taken as it stands: it has already collapsed each re-born
+ * finding onto the decision it carries. From this page only decisions taken
+ * SINCE IT LOADED are added, because every finding settled before that is in
+ * the api's list already, under whichever row kept the wording.
+ *
+ * (Deduplicating the two sides here by subject, field, state and timestamp
+ * does not work: the api compares microseconds, JSON carries milliseconds, and
+ * two different findings settled in one batch then read as one decision.)
+ */
+function decisionsFor(key) {
+  const rows = [];
+  const keep = (row) => rows.push(row);
+  for (const d of DECISIONS) {
+    if (d.groupKey !== key) continue;
+    keep({
+      id: d.id,
+      subjectId: d.subjectId,
+      subjectField: d.subjectField,
+      title: d.checkTitle,
+      subjectLabel: d.subjectLabel,
+      suggestion: null,
+      message: d.message,
+      state: d.state,
+      decidedAt: d.decidedAt,
+      originalValue: d.currentValue,
+      appliedValue: d.appliedValue,
+      autoFixKey: d.autoFixKey,
+    });
+  }
+  for (const f of groupFindings(key, x => x.decidedHere)) {
+    keep({
+      id: f.id,
+      subjectId: f.subjectId,
+      subjectField: f.subjectField,
+      title: f.evaluation.title,
+      subjectLabel: f.subjectLabel,
+      suggestion: f.suggestion,
+      message: f.message,
+      state: f.state,
+      decidedAt: f.decidedAt || f.appliedAt || f.dismissedAt || null,
+      originalValue: f.originalValue,
+      appliedValue: f.appliedValue,
+      autoFixKey: f.autoFixKey,
+    });
+  }
+  return rows.sort((a, b) => String(b.decidedAt ?? '').localeCompare(String(a.decidedAt ?? '')));
+}
+function tileStatus(key) {
+  if (fixing.has(key)) return 'in-progress';
+  const c = counts(key);
+  if (c.issue) return 'issue';
+  if (c.improvement) return 'improvement';
+  if (c.error) return 'error';
+  // Green once nothing is open, awaiting checks included: the author owes
+  // nothing here, and the tally still says the re-run is outstanding.
+  if (c.issue + c.improvement + c.pass + c.awaiting) return 'pass';
+  return 'skipped';
+}
+function tally(key) {
+  const c = counts(key);
+  const opens = groupFindings(key, isOpen);
+  const issue = opens.filter(f => f.evaluation.outcome === 'issue').length;
+  const imp = opens.filter(f => f.evaluation.outcome === 'improvement').length;
+  // Decisions are counted as FINDINGS: approving nine and ignoring one reads
+  // as ten, whether one check raised them all or six did.
+  // "Awaiting re-run" is only what no run has seen yet: a decision taken on
+  // this page, or one taken after the run that raised its finding. A re-run
+  // births a finding already settled where a standing decision covers it,
+  // carrying that decision's own (older) timestamp, so those are confirmed and
+  // the tally leaves them to "passed". They stay revisitable all the same.
+  const pending = groupFindings(key, f => (f.state === 'applied' || f.state === 'dismissed') &&
+    (f.decidedHere || !f.evaluation.startedAt ||
+      String(f.appliedAt || f.dismissedAt || '') >= String(f.evaluation.startedAt)));
+  const fixed = pending.filter(f => f.state === 'applied').length;
+  const ignored = pending.filter(f => f.state === 'dismissed').length;
+  const stale = groupFindings(key, f => f.state === 'stale').length;
+  const settled = [
+    fixed ? fixed + ' fixed' : null,
+    ignored ? ignored + ' ignored' : null,
+    stale ? stale + ' out of date' : null,
+  ].filter(Boolean);
+  const parts = [];
+  if (issue) parts.push(issue + (issue === 1 ? ' issue' : ' issues'));
+  if (imp) parts.push(imp + (imp === 1 ? ' improvement' : ' improvements'));
+  if (settled.length) parts.push(settled.join(', ') + ', awaiting re-run');
+  if (c.pass) parts.push(c.pass + ' passed');
+  if (c.error) parts.push(c.error + ' could not run');
+  return parts.length ? parts.join(' · ') : 'Does not apply to this test';
+}
+// `awaiting` is a real state and gets its own swatch — the POC drew it in the
+// same grey as "nothing here", so the two were indistinguishable.
+function bar(c, emphasis) {
+  const TONES = { issue: 'issue', improvement: 'warn', awaiting: null, pass: 'pass' };
+  const segs = ['issue','improvement','awaiting','pass'].filter(k => c[k] > 0).map(k =>
+    `<span class="ck-seg${k === 'awaiting' ? ' ck-seg--awaiting' : ''}${emphasis === k ? ' ck-seg--em' : ''}"${TONES[k] ? ` data-tone="${TONES[k]}"` : ''} style="flex-grow:${c[k]}"></span>`);
+  return segs.length ? segs.join('') : '<span class="ck-seg ck-seg--empty"></span>';
+}
+// The fixture names its own test in one finding's subject. Show whatever the
+// shell is titled instead, so the two tabs never disagree about which test
+// this is — including when the calibration rubric switch renames it.
+const subjectOf = (f) => (f.subjectLabel || '').startsWith(TEST_TITLE) ? shellTitle : f.subjectLabel;
+const chipOf = (f) => {
+  const s = f.suggestion || {};
+  const name = s.label || subjectOf(f).split(' · ')[0].replace(/^\d+[.)]\s*/, '').split(/\s+/).slice(0, 6).join(' ');
+  return { name, qualifier: s.qualifier || null };
+};
+
+/* ---- run lifecycle -------------------------------------------------------
+ * The panel opens 'not-checked': nothing has been run against this test yet,
+ * so there is an intro and a Run checks button and nothing else. Running
+ * reveals the payload. The button never moves between states — only its label,
+ * its icon and the row beneath it change.
+ *
+ * `disabled` and `icon` are set as ATTRIBUTES, not properties: tv-button reads
+ * attributes, and assigning a property on a custom element can land before it
+ * upgrades and be lost.
+ * ------------------------------------------------------------------------- */
+let runState = 'not-checked';                     // not-checked | running | checked
+const runBtn = document.getElementById('run-checks');
+const RUN_LABEL = { 'not-checked': 'Run checks', running: 'Running checks…', checked: 'Re-run checks' };
+const RUN_ICON = { 'not-checked': 'play', running: null, checked: 'rotate-cw' };
+
+function setRunState(next) {
+  runState = next;
+  const checked = next === 'checked';
+  // The intro stays up through the run, so the card changes shape once (when
+  // results land) rather than collapsing and re-growing.
+  document.getElementById('chk-intro').hidden = checked;
+  document.getElementById('chk-meta').hidden = !checked;
+  document.getElementById('tiles').hidden = !checked;
+  document.getElementById('bands').hidden = !checked;
+  runBtn.textContent = RUN_LABEL[next];
+  if (RUN_ICON[next]) runBtn.setAttribute('icon', RUN_ICON[next]);
+  else runBtn.removeAttribute('icon');
+  if (next === 'running') runBtn.setAttribute('disabled', '');
+  else runBtn.removeAttribute('disabled');
+  render();
+}
+
+runBtn.addEventListener('click', () => {
+  if (runState === 'running') return;
+  const first = runState === 'not-checked';
+  setRunState('running');
+  setTimeout(() => {
+    DATA.lastCheckedAt = new Date().toISOString();
+    setRunState('checked');
+    const open = [...findings.values()].filter(isOpen).length;
+    if (first) toast('Checks complete', `${DATA.evaluations.length} checks run · ` +
+      (open ? `${open} ${open === 1 ? 'item needs' : 'items need'} your review.` : 'nothing needs your review.'),
+      open ? 'warn' : 'pass');
+    // One payload of mock results, so a re-run returns the same findings. A
+    // real re-run would confirm the changes approved since the last one.
+    else toast('Checks re-run', `The same ${DATA.evaluations.length} results come back — this mockup has one payload. A real re-run would confirm the changes you approved.`, 'brand');
+  }, 1400);
+});
+
+// ---- render
+function renderHead() {
+  const chip = document.getElementById('status-tag');
+  if (runState === 'not-checked') { chip.innerHTML = '<tv-status-tag kind="not-checked"></tv-status-tag>'; return; }
+  if (runState === 'running') { chip.innerHTML = '<tv-status-tag tone="primary" busy label="Running checks"></tv-status-tag>'; return; }
+  const d = new Date(DATA.lastCheckedAt);
+  document.getElementById('last-checked').textContent = 'Last checked ' +
+    d.toLocaleString(undefined, { day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  document.getElementById('checks-run').textContent = DATA.evaluations.length + ' checks run';
+  const openFindings = [...findings.values()].filter(isOpen);
+  const open = openFindings.length;
+  const anyIssue = openFindings.some(f => f.evaluation.outcome === 'issue');
+  const count = document.getElementById('open-count');
+  count.textContent = open;
+  count.style.color = open ? (anyIssue ? 'var(--error-500)' : 'var(--warn-600)') : 'var(--success-600)';
+  // The POC's header chip only had two states, so a panel with open ISSUES
+  // still read amber "Needs review". It now carries the worst open severity.
+  chip.innerHTML = open
+    ? `<tv-status-tag kind="${anyIssue ? 'issue' : 'improvement'}" label="Needs review"></tv-status-tag>`
+    : `<tv-status-tag kind="passed" label="Checked"></tv-status-tag>`;
+}
+
+function renderTiles() {
+  const host = document.getElementById('tiles');
+  host.innerHTML = DATA.groups
+    .filter(g => Object.values(g.counts).reduce((a, b) => a + b, 0) > 0)
+    .sort((a, b) => a.displayIndex - b.displayIndex)
+    .map(g => {
+      const st = tileStatus(g.key);
+      const c = counts(g.key);
+      const opens = groupFindings(g.key, isOpen).length;
+      const glyph = st === 'in-progress'
+        ? '<span class="ck-spinner" role="status" aria-label="Fixing issues" style="color:var(--primary-600)"></span>'
+        : mark(st);
+      // The tile holds decisions and nothing open: "Fix issues" left with the
+      // last open finding, so the way back to what was decided is the only
+      // thing to offer.
+      const decided = decisionsFor(g.key).length;
+      const settledHere = opens === 0 && !fixing.has(g.key);
+      const revisitable = decided > 0 && settledHere;
+      // A tile that passed outright has no decisions behind it. Saying so on
+      // hover is the demo's own addition: the panel itself shows nothing,
+      // which reads as the button being broken rather than inapplicable.
+      const nothingToRevisit = decided === 0 && settledHere &&
+        ['pass', 'skipped'].includes(st);
+      // The tile is a div with a button role, not a <button>: its own controls
+      // are real buttons and a button cannot nest inside another.
+      return `<div class="tile${revisitable ? ' tile--revisitable' : ''}" role="button" tabindex="0" data-group="${g.key}">
+        <span class="tile__fade">
+          <span class="tile__head">${glyph}<h3>${esc(g.title)}</h3></span>
+          <p class="tile__q">${esc(g.description || '')}</p>
+          <span class="ck-bar ck-bar--fill">${bar(c)}</span>
+          <span class="tile__foot">
+            <span class="tile__tally">${fixing.has(g.key) ? 'Fixing issues…' : tally(g.key)}</span>
+            ${opens && !fixing.has(g.key) ? `<button type="button" class="tile__fix" data-fix="${g.key}">Fix issues</button>` : ''}
+          </span>
+        </span>
+        ${revisitable ? `<span class="tile__revisit">
+          <button type="button" class="pill" data-revisit="${g.key}">
+            <i class="icon-history" aria-hidden="true"></i>Revisit decisions
+          </button>
+        </span>` : ''}
+        ${nothingToRevisit ? `<span class="tile__revisit tile__revisit--empty">
+          <span class="tile__none">Every check here passed on its own, so there is nothing to revisit</span>
+        </span>` : ''}
+      </div>`;
+    }).join('');
+}
+
+function bandRow(f) {
+  const st = f.evaluation.outcome;
+  const chip = chipOf(f);
+  const settled = f.state === 'applied'
+    ? '<span class="finding__state" data-tone="pass">Change applied. Re-run checks to confirm it.</span>'
+    : f.state === 'dismissed' ? '<span class="finding__state" data-tone="none">Ignored.</span>'
+    : f.state === 'stale' ? '<span class="finding__state" data-tone="warn">Out of date: this field changed since the run.</span>' : '';
+  return `<li><button class="finding" type="button" data-finding="${f.id}">
+      <span class="finding__main">
+        <span class="finding__title">${mark(st, true)}${esc(f.evaluation.title)}</span>
+        <span class="finding__msg">${esc(f.message)}</span>
+        ${settled}
+      </span>
+      <span class="chip"><span class="chip__name">${esc(chip.name)}</span>${chip.qualifier ? `<span class="chip__q">${esc(chip.qualifier)}</span>` : ''}</span>
+    </button></li>`;
+}
+
+// Keyed by a stable id, not by the visible label — renaming a band in the copy
+// silently broke its toggle in the POC.
+const BANDS = [
+  { id: 'issues', label: 'Issues', tone: 'issue' },
+  { id: 'improvements', label: 'Improvements', tone: 'warn' },
+  { id: 'passed', label: 'Passed', tone: 'pass' },
+  { id: 'skipped', label: 'Skipped', tone: 'none' },
+  { id: 'errored', label: 'Could not run', tone: 'issue' },
+];
+const bandState = { issues: false, improvements: true, passed: false, skipped: false, errored: false };
+
+function renderBands() {
+  const open = [...findings.values()].filter(isOpen);
+  const byOutcome = (o) => open.filter(f => f.evaluation.outcome === o);
+  const passed = DATA.evaluations.filter(ev => {
+    const s = evalStatus(ev);
+    return s === 'pass' || s === 'settled';
+  });
+  const skipped = DATA.evaluations.filter(ev => ev.outcome === 'skipped');
+  const errored = DATA.evaluations.filter(ev => ev.status === 'error');
+
+  // `n` is what the header counts (open findings, for the two finding bands);
+  // `rows` is what the band holds. A finding applied, ignored or gone out of
+  // date stays in it, so the band still opens and the header says how many are
+  // dealt with. Deciding "empty" from the open count made those unreachable.
+  const band = (def, n, body, rows = n) => {
+    const on = bandState[def.id] && rows > 0;
+    const dealt = Math.max(0, rows - n);
+    return `<section class="band">
+      <button class="band__toggle" type="button" data-band="${def.id}" aria-expanded="${on}" ${rows === 0 ? 'disabled' : ''}>
+        <i class="icon-chevron-right" aria-hidden="true"></i>
+        <span class="band__label">${def.label}</span>
+        <span class="band__n ${n === 0 ? 'band__n--zero' : ''}" data-tone="${def.tone}">${n}</span>
+        ${dealt ? `<span class="band__dealt">· ${dealt} dealt with</span>` : ''}
+      </button>
+      <div class="band__body" ${on ? '' : 'hidden'}>${body}</div>
+    </section>`;
+  };
+  const checkList = (evs, detail) => `<ul class="checks">${evs.map(ev => `<li>
+      ${mark(evalStatus(ev), true)}
+      <span class="check__title">${esc(ev.title)}</span>
+      ${detail && ev.detail ? `<span class="check__detail">${esc(ev.detail)}</span>` : ''}
+      ${ev.model ? `<span class="check__model">${esc(ev.model)}</span>` : ''}
+    </li>`).join('')}</ul>`;
+
+  const all = [...findings.values()];
+  const rowsFor = (o) => all.filter(f => f.evaluation.outcome === o);
+  const byId = Object.fromEntries(BANDS.map(b => [b.id, b]));
+
+  document.getElementById('bands').innerHTML = [
+    band(byId.issues, byOutcome('issue').length,
+      `<ul class="findings">${rowsFor('issue').map(bandRow).join('')}</ul>`, rowsFor('issue').length),
+    band(byId.improvements, byOutcome('improvement').length,
+      `<ul class="findings">${rowsFor('improvement').map(bandRow).join('')}</ul>`, rowsFor('improvement').length),
+    band(byId.passed, passed.length, checkList(passed, false)),
+    band(byId.skipped, skipped.length, checkList(skipped, true)),
+    band(byId.errored, errored.length, checkList(errored, true)),
+  ].join('');
+}
+
+// Before a run there is nothing to draw but the run card.
+function render() { renderHead(); if (runState === 'checked') { renderTiles(); renderBands(); } }
+
+// ---- group modal
+const groupModal = document.getElementById('group-modal');
+const fixModal = document.getElementById('fix-modal');
+const decisionsModal = document.getElementById('decisions-modal');
+
+function openGroup(key) {
+  const g = DATA.groups.find(x => x.key === key);
+  if (!g) return;
+  queueGroup = key;
+  const evs = DATA.evaluations.filter(ev => ev.groupKey === key && ev.outcome !== 'skipped');
+  groupModal.setAttribute('heading', g.title);
+  groupModal.setAttribute('subtitle', `${g.description} · ${evs.length} check item${evs.length === 1 ? '' : 's'}`);
+  groupModal.innerHTML = `<ul class="glist">${evs.map(ev => {
+    const st = evalStatus(ev);
+    const unfixable = ev.findings.map(f => findings.get(f.id)).filter(f => isOpen(f) && !isFixable(f));
+    const reasons = unfixable.map(f =>
+      `${subjectOf(f)}: ${f.message}${f.suggestionNote ? ' ' + f.suggestionNote : ''}`).join('\n');
+    return `<li><div class="gitem">
+      ${mark(st, true)}
+      <span class="gitem__text">${esc(ev.title)}
+        ${st === 'settled' ? '<span class="gitem__aside">(settled, re-run to confirm)</span>' : ''}
+        ${unfixable.length ? `<span class="gitem__aside gitem__aside--help" title="${esc(reasons)}">(not automatically fixable)</span>` : ''}
+      </span>
+    </div></li>`;
+  }).join('')}</ul>`;
+  const openCount = groupFindings(key, isOpen).length;
+  // Primary right, secondary before it — the system's footer grammar. The POC
+  // pinned "Fix all issues" to the left of the footer.
+  if (openCount) groupModal.setAttribute('primary-label', 'Fix all issues');
+  else groupModal.removeAttribute('primary-label');
+  groupModal.open();
+}
+
+// ---- fix queue
+function openQueue(key, startId) {
+  queueGroup = key;
+  queue = groupFindings(key, isOpen).map(f => f.id);
+  if (startId && !queue.includes(startId)) queue = [startId];
+  queueIndex = startId ? Math.max(0, queue.indexOf(startId)) : 0;
+  if (!queue.length) return;
+  renderQueue();
+  fixModal.open();
+}
+function renderQueue() {
+  const f = findings.get(queue[queueIndex]);
+  if (!f) { fixModal.close({ force: true }); return; }
+  const g = DATA.groups.find(x => x.key === f.evaluation.groupKey);
+  fixModal.setAttribute('heading', f.evaluation.title);
+  fixModal.setAttribute('subtitle', g ? g.title : '');
+  const sev = f.evaluation.outcome === 'issue' ? 'issue' : 'improvement';
+  fixModal.setAttribute('marker-kind', sev);
+  fixModal.setAttribute('marker-label', sev === 'issue' ? 'Issue' : 'Improvement');
+  const chip = chipOf(f);
+  document.getElementById('fix-chip').innerHTML =
+    `<span class="chip__name">${esc(chip.name)}</span>${chip.qualifier ? `<span class="chip__q">${esc(chip.qualifier)}</span>` : ''}`;
+  document.getElementById('fix-where').textContent = subjectOf(f) + (f.subjectField ? ' · ' + f.subjectField : '');
+  document.getElementById('fix-msg').textContent = f.message;
+  document.getElementById('fix-bar').innerHTML = bar(counts(f.evaluation.groupKey), sev);
+
+  const banner = document.getElementById('fix-banner');
+  if (f.state === 'applied') {
+    banner.textContent = 'Change applied. Re-run checks to confirm it.';
+    banner.setAttribute('data-tone', 'pass'); banner.hidden = false;
+  } else if (f.state === 'dismissed') {
+    banner.textContent = 'Ignored. It will come back dismissed on the next run.';
+    banner.setAttribute('data-tone', 'none'); banner.hidden = false;
+  } else banner.hidden = true;
+
+  const hasDraft = Boolean(f.suggestedValue);
+  document.getElementById('fix-proposal').hidden = !hasDraft;
+  const note = document.getElementById('fix-note');
+  note.hidden = hasDraft;
+  note.setAttribute('data-tone', 'none');
+  if (!hasDraft) note.textContent = f.suggestionNote || 'No suggestion was drafted for this finding.';
+  if (hasDraft) {
+    document.getElementById('fix-current').textContent = f.currentValue || 'This field is empty.';
+    const box = document.getElementById('fix-proposed');
+    box.value = edited.get(f.id) ?? f.suggestedValue;
+    box.disabled = f.state !== 'open';
+    const reasons = (f.suggestion && f.suggestion.reasons) || [];
+    const why = document.getElementById('fix-why');
+    why.hidden = reasons.length === 0;
+    document.getElementById('fix-reasons').innerHTML = reasons.map(r => `<li>${esc(r)}</li>`).join('');
+  }
+  const single = queue.length < 2;
+  document.getElementById('fix-step').style.display = single ? 'none' : '';
+  document.getElementById('fix-pos').textContent = `${queueIndex + 1} of ${queue.length}`;
+  document.getElementById('fix-prev').disabled = queueIndex === 0;
+  document.getElementById('fix-next').disabled = queueIndex >= queue.length - 1;
+  fixModal.setAttribute('primary-label', hasDraft ? 'Approve change' : (queueIndex >= queue.length - 1 ? 'Done' : 'Next issue'));
+  fixModal.confirmDisabled = f.state !== 'open' && hasDraft;
+  // Ignore is an action, not a dismissal, so it reports and leaves the card
+  // open. Once the finding is settled there is nothing left to ignore and the
+  // secondary goes back to being a plain dismissal.
+  if (f.state === 'open') {
+    fixModal.setAttribute('cancel-label', 'Ignore');
+    fixModal.setAttribute('cancel-closes', 'false');
+  } else {
+    fixModal.setAttribute('cancel-label', 'Close');
+    fixModal.removeAttribute('cancel-closes');
+  }
+}
+function step(by) {
+  queueIndex = Math.min(queue.length - 1, Math.max(0, queueIndex + by));
+  renderQueue();
+}
+function settle(state) {
+  const f = findings.get(queue[queueIndex]);
+  if (!f) return;
+  if (f.state === 'open') {
+    if (state === 'applied' && f.suggestedValue) {
+      const box = document.getElementById('fix-proposed');
+      f.appliedValue = box.value;          // what the approval wrote, kept for later
+      f.currentValue = box.value;          // the field now holds what was approved
+    }
+    f.state = state;
+    f.decidedAt = new Date().toISOString();
+    f.decidedHere = true;
+  }
+  render();
+  const next = queue.slice(queueIndex + 1).findIndex(id => isOpen(findings.get(id)));
+  if (next === -1) {
+    const anyLeft = queue.some(id => isOpen(findings.get(id)));
+    if (!anyLeft) { fixModal.close({ force: true }); toast('Nothing left here', 'Every finding in this check group has been settled. Re-run checks to confirm.', 'pass'); return; }
+    renderQueue();
+  } else { queueIndex = queueIndex + 1 + next; renderQueue(); }
+}
+function fixAll(key) {
+  const fixable = groupFindings(key, f => isOpen(f) && isFixable(f));
+  const left = groupFindings(key, f => isOpen(f) && !isFixable(f)).length;
+  groupModal.close({ force: true });
+  if (!fixable.length) { toast('Nothing was fixed automatically', 'Everything left here needs editing by hand. Open a finding to see what it says.', 'warn'); return; }
+  fixing.add(key); render();
+  setTimeout(() => {
+    for (const f of fixable) {
+      if (f.suggestedValue) { f.appliedValue = f.suggestedValue; f.currentValue = f.suggestedValue; }
+      f.state = 'applied';
+      f.decidedAt = new Date().toISOString();
+      f.decidedHere = true;
+    }
+    fixing.delete(key); render();
+    toast(`Fixed ${fixable.length} ${fixable.length === 1 ? 'issue' : 'issues'}`,
+      left ? `${left} ${left === 1 ? 'is' : 'are'} still open: what is left needs editing by hand.`
+           : 'Re-run checks to confirm the changes.', 'pass');
+  }, 900);
+}
+
+// ---- what a decision wrote
+// A word diff, with the common head and tail stripped before anything is
+// allocated: a targeted edit leaves a handful of tokens between them, and the
+// fields here can hold a pasted case study.
+function tokens(text) { return String(text ?? '').split(/(\s+)/).filter(t => t !== ''); }
+
+function wordDiff(before, after) {
+  const a = tokens(before), b = tokens(after);
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head &&
+         a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  const midA = a.slice(head, a.length - tail), midB = b.slice(head, b.length - tail);
+  const common = a.slice(0, head).join('');
+  const end = a.slice(a.length - tail).join('');
+  return {
+    before: [{ text: common, changed: false }, { text: midA.join(''), changed: midA.length > 0 }, { text: end, changed: false }],
+    after: [{ text: common, changed: false }, { text: midB.join(''), changed: midB.length > 0 }, { text: end, changed: false }],
+  };
+}
+
+function diffHtml(segments, tone) {
+  const tag = tone === 'removed' ? 'del' : 'ins';
+  return segments.filter(seg => seg.text !== '')
+    .map(seg => seg.changed ? `<${tag} class="diff">${esc(seg.text)}</${tag}>` : esc(seg.text))
+    .join('');
+}
+
+const decisions = { key:null, index:0, all:false };
+
+function decisionHtml(d) {
+  const chip = chipOf(d);
+  const applied = d.state === 'applied';
+  const when = d.decidedAt
+    ? new Date(d.decidedAt).toLocaleString(undefined, { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+    : null;
+  let body;
+  if (applied && d.appliedValue) {
+    const diff = wordDiff(d.originalValue, d.appliedValue);
+    body = `<div class="field" style="margin-bottom:12px">
+        <span class="ck-eyebrow">Before</span>
+        <div class="readout">${d.originalValue ? diffHtml(diff.before, 'removed') : '<i>This field was empty.</i>'}</div>
+      </div>
+      <div class="field">
+        <span class="ck-eyebrow">Applied</span>
+        <div class="readout">${diffHtml(diff.after, 'added')}</div>
+      </div>`;
+  } else if (applied) {
+    // An auto-fix repairs numbers rather than wording, and a decision taken
+    // before the api recorded the text has none to show.
+    body = `<p class="ck-note" data-tone="none"><span class="ck-note__body">${d.autoFixKey
+      ? 'Repaired from the data, so there is no wording to compare.'
+      : 'This was approved before the wording was recorded, so it cannot be shown.'}</span></p>`;
+  } else {
+    body = '';
+  }
+  return `<div class="dec">
+    <div class="dec__head">
+      <tv-status-tag kind="${applied ? 'passed' : 'skipped'}" label="${applied ? 'Approved' : 'Ignored'}"></tv-status-tag>
+      <span class="dec__where">${esc(chip.name)}</span>
+      ${when ? `<span class="dec__when">${esc(when)}</span>` : ''}
+    </div>
+    <p class="dec__msg">${esc(d.message)}</p>
+    <p class="dec__check">${esc(d.title)}</p>
+    ${body}
+  </div>`;
+}
+
+function renderDecisions() {
+  const rows = decisions.key ? decisionsFor(decisions.key) : [];
+  const g = DATA.groups.find(x => x.key === decisions.key);
+  decisionsModal.setAttribute('heading', (g ? g.title + ': ' : '') + 'your decisions');
+  decisions.index = Math.min(decisions.index, Math.max(0, rows.length - 1));
+  document.getElementById('decisions-body').innerHTML = rows.length === 0
+    ? '<p class="ck-note" data-tone="none"><span class="ck-note__body">Nothing has been approved or ignored here yet.</span></p>'
+    : decisions.all ? rows.map(decisionHtml).join('') : decisionHtml(rows[decisions.index]);
+  const stepping = !decisions.all && rows.length > 1;
+  document.getElementById('decisions-step').style.display = stepping ? '' : 'none';
+  document.getElementById('decisions-pos').textContent = `${decisions.index + 1} of ${rows.length}`;
+  document.getElementById('decisions-prev').disabled = decisions.index === 0;
+  document.getElementById('decisions-next').disabled = decisions.index >= rows.length - 1;
+  // With one decision there is nothing to switch between, so the secondary is
+  // a plain dismissal rather than the view toggle.
+  if (rows.length < 2) {
+    decisionsModal.setAttribute('cancel-label', 'Close');
+    decisionsModal.removeAttribute('cancel-closes');
+  } else {
+    decisionsModal.setAttribute('cancel-label', decisions.all ? 'Step through' : 'View all');
+    decisionsModal.setAttribute('cancel-closes', 'false');
+  }
+}
+
+function openDecisions(key) {
+  decisions.key = key; decisions.index = 0; decisions.all = false;
+  renderDecisions();
+  decisionsModal.open();
+}
+
+
+// ---- wiring
+const tiles = document.getElementById('tiles');
+function tileAction(target) {
+  const revisit = target.closest('[data-revisit]');
+  if (revisit) { openDecisions(revisit.dataset.revisit); return true; }
+  const fix = target.closest('[data-fix]');
+  if (fix) { openQueue(fix.dataset.fix); return true; }
+  return false;
+}
+tiles.addEventListener('click', (e) => {
+  if (tileAction(e.target)) { e.stopPropagation(); return; }
+  const tile = e.target.closest('[data-group]');
+  if (tile) openGroup(tile.dataset.group);
+});
+tiles.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  // the inner controls are real buttons and handle their own keys
+  if (e.target.closest('[data-revisit],[data-fix]')) return;
+  const tile = e.target.closest('[data-group]');
+  if (tile) { e.preventDefault(); openGroup(tile.dataset.group); }
+});
+document.getElementById('bands').addEventListener('click', (e) => {
+  const toggle = e.target.closest('[data-band]');
+  if (toggle) { bandState[toggle.dataset.band] = toggle.getAttribute('aria-expanded') !== 'true'; renderBands(); return; }
+  const row = e.target.closest('[data-finding]');
+  if (row) { const f = findings.get(row.dataset.finding); if (f) openQueue(f.evaluation.groupKey, f.id); }
+});
+
+groupModal.addEventListener('tv-confirm', () => fixAll(queueGroup));
+fixModal.addEventListener('tv-cancel', () => {
+  const f = findings.get(queue[queueIndex]);
+  if (f && f.state === 'open') settle('dismissed');   // else the secondary was "Close"
+});
+fixModal.addEventListener('tv-confirm', () => {
+  const f = findings.get(queue[queueIndex]);
+  if (f && f.suggestedValue && f.state === 'open') settle('applied');
+  else if (queueIndex < queue.length - 1) step(1);
+  else fixModal.close({ force: true });
+});
+decisionsModal.addEventListener('tv-cancel', () => {
+  const rows = decisions.key ? decisionsFor(decisions.key) : [];
+  if (rows.length < 2) return;                        // the secondary was "Close"
+  decisions.all = !decisions.all; renderDecisions();
+});
+decisionsModal.addEventListener('tv-confirm', () => decisionsModal.close({ force: true }));
+document.getElementById('decisions-prev').addEventListener('click', () => { decisions.index--; renderDecisions(); });
+document.getElementById('decisions-next').addEventListener('click', () => { decisions.index++; renderDecisions(); });
+decisionsModal.addEventListener('keydown', (e) => {
+  if (decisions.all) return;
+  if (e.key === 'ArrowLeft' && decisions.index > 0) { e.preventDefault(); decisions.index--; renderDecisions(); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); decisions.index++; renderDecisions(); }
+});
+document.getElementById('fix-prev').addEventListener('click', () => step(-1));
+document.getElementById('fix-next').addEventListener('click', () => step(1));
+document.getElementById('fix-why').addEventListener('click', (e) => {
+  const list = document.getElementById('fix-reasons');
+  const on = list.hidden;
+  list.hidden = !on;
+  e.currentTarget.setAttribute('aria-expanded', String(on));
+  e.currentTarget.textContent = on ? 'Hide reasons' : 'Why this change';
+});
+document.getElementById('fix-proposed').addEventListener('input', (e) => {
+  const f = findings.get(queue[queueIndex]);
+  if (f) edited.set(f.id, e.target.value);
+});
+fixModal.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+});
+
+// ---- demo chrome
+// The three shortcuts reach into results, so they run the checks first if the
+// panel is still in its not-checked state.
+document.getElementById('chk-mockbar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-mock]');
+  if (!b) return;
+  const needsResults = ['revisit', 'fix', 'group'].includes(b.dataset.mock);
+  if (needsResults && runState !== 'checked') setRunState('checked');
+  if (b.dataset.mock === 'revisit') openDecisions('consistency');
+  if (b.dataset.mock === 'fix') openQueue('coverage');
+  if (b.dataset.mock === 'group') openGroup('structure');
+  if (b.dataset.mock === 'reset') {
+    for (const [id, f] of pristine) findings.set(id, { ...f });
+    edited = new Map(); fixing.clear();
+    DATA.lastCheckedAt = pristineLastChecked;
+    setRunState('not-checked');
+    toast('Panel reset', 'Back to the not-checked state, with every finding as it loaded.', 'brand');
+  }
+});
+
+setRunState('not-checked');
+
+FEATURES.checks = { render }
+
+})()
+</script>
+
+<script>
+/* ---- boot: honour ?tab=, default to Sample calibration ---- */
+setTab(new URLSearchParams(location.search).get('tab') || 'calibration')
+</script>
+</body>
+</html>

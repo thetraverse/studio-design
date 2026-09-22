@@ -34,7 +34,19 @@
                      primary button keeps its right-hand position but renders red
      danger-label    secondary destructive button (left) alongside a non-destructive primary
      cancel-label    secondary (dismiss) button text        (default 'Cancel')
+                     Set it explicitly to get a footer with no primary beside it.
+     cancel-closes   'false' keeps the card open when the secondary is pressed —
+                     for a secondary that is an action, not a dismissal
+                     (Ignore, View all). ✕ / Esc / scrim still close. Default: closes.
      footer-hint     optional bottom-left footer text (form modals: validation / guidance)
+
+   Slots:
+     (default)       the card body
+     footer-start    optional controls pinned to the FOOTER's left edge, before
+                     the hint. For stepping through a set the card is working
+                     across (‹ 3 of 12 ›) — navigation *within* the card, not a
+                     commit. Anything that commits stays a footer button on the
+                     right. Omit it and the footer is unchanged.
      dismissible     allow close button / esc / overlay (default true)
      confirm-disabled  disable the primary button
      guard           if present, prompt before closing when .dirty is true
@@ -184,9 +196,16 @@
 
       const widths = { sm: '440px', md: '600px', lg: '760px' }
       const marker = markerKind ? `<tv-status-tag kind="${markerKind}" label="${markerLabel}"></tv-status-tag>` : ''
+      // Only mount the footer-start slot when the host actually supplies one,
+      // so `footer:empty` still collapses for cards with no footer at all.
+      const hasFooterStart = !!this.querySelector('[slot="footer-start"]')
 
+      // A card may want a secondary button with no primary beside it (a
+      // read-only card whose only footer action is "Close"). Setting
+      // cancel-label explicitly is the opt-in; without it the footer still
+      // collapses entirely, so nothing already built changes.
       const footerBtns =
-        danger || primary
+        danger || primary || this.hasAttribute('cancel-label')
           ? `${danger ? `<tv-button variant="danger" data-act="danger" class="f-danger">${danger}</tv-button>` : ''}
              <tv-button variant="secondary" data-act="cancel">${cancelLabel}</tv-button>
              ${primary ? `<tv-button variant="${primaryVariant}" data-act="confirm" ${confirmDisabled ? 'disabled' : ''}>${primary}</tv-button>` : ''}`
@@ -228,9 +247,11 @@
           .marker + .close{ margin-left:0; }
           header.no-marker .close{ margin-left:auto; }
           .body{ padding:18px; overflow:auto; flex:1 1 auto; }
-          ::slotted(* + *){ margin-top:14px; }
+          /* scoped to the body's slot so footer-start content is untouched */
+          .body ::slotted(* + *){ margin-top:14px; }
           footer{ display:flex; align-items:center; gap:10px; padding:13px 18px; border-top:1px solid var(--surface-100,#f1f5f9); flex:0 0 auto; justify-content:flex-end; }
           footer:empty{ display:none; }
+          .fstart{ display:inline-flex; align-items:center; gap:4px; margin-right:auto; }
           footer .f-danger{ margin-right:auto; }
           .fhint{ margin-right:auto; font:400 12px var(--tv-font,'Geist','Inter',system-ui,sans-serif); color:var(--surface-500,#64748b); }
           .fhint:empty{ display:none; }
@@ -247,7 +268,7 @@
               ${dismissible ? `<button class="close" type="button" aria-label="Close"><i class="icon-x"></i></button>` : ''}
             </header>
             <div class="body"><slot></slot></div>
-            <footer>${footerHint ? `<span class="fhint">${footerHint}</span>` : ''}${footerBtns}</footer>
+            <footer>${hasFooterStart ? `<span class="fstart"><slot name="footer-start"></slot></span>` : ''}${footerHint ? `<span class="fhint">${footerHint}</span>` : ''}${footerBtns}</footer>
           </div>
         </div>
       `
@@ -279,7 +300,11 @@
         const act = btn.getAttribute('data-act')
         if (act === 'cancel') {
           this.dispatchEvent(new CustomEvent('tv-cancel', { bubbles: true, composed: true }))
-          this.close()
+          // cancel-closes="false": the secondary is an action in its own right
+          // (Ignore this finding, View all) rather than a dismissal, so it
+          // reports and leaves the card open. Close still works via ✕ / Esc /
+          // the scrim. Default is unchanged: cancel dismisses.
+          if (this.getAttribute('cancel-closes') !== 'false') this.close()
         } else if (act === 'danger') {
           this.dispatchEvent(new CustomEvent('tv-danger', { bubbles: true, composed: true }))
         } else if (act === 'confirm') {
